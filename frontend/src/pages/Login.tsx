@@ -45,7 +45,8 @@ export default function Login() {
   };
 
   const handleOAuthLogin = (provider: string) => {
-    window.location.href = `http://localhost:8000/auth/oauth/${provider}`;
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+    window.location.href = `${apiUrl}/auth/oauth/${provider}`;
   };
 
   return (

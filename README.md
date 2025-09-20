@@ -1,297 +1,209 @@
-# BulletDrop - Discord Profile & Image Hosting Platform
+# BulletDrop
 
-A modern, full-stack web application that provides Discord-style user profiles and comprehensive image hosting capabilities with custom domain support. Users can create personalized profiles, upload files with drag-and-drop functionality, and share content through custom domains.
+Discord profile and image hosting platform with custom domains and screenshot tools.
 
-## ✨ Features
-
-### 🔐 Authentication & User Management
-- **Multi-Provider Authentication**: JWT-based auth + OAuth integration (Google, GitHub, Discord)
-- **Secure Password Management**: Bcrypt password hashing with token refresh capabilities
-- **User Profiles**: Comprehensive profile customization with social media links
-- **Admin Panel**: Administrative dashboard for platform management
-
-### 📁 File Upload & Hosting
-- **Drag-and-Drop Upload**: Modern file upload interface with progress tracking
-- **Multiple File Support**: Batch upload capabilities with validation
-- **ShareX Integration**: Compatible endpoint for screenshot tools
-- **File Management**: View, rename, delete, and organize uploaded files
-- **Storage Tracking**: Real-time storage usage monitoring with quotas
-
-### 🌐 Custom Domain Support
-- **Domain Selection**: Choose from predefined hosting domains
-- **Custom URLs**: User-friendly file URLs with custom naming
-- **View Analytics**: Track file views and engagement metrics
-
-### 🎨 Modern UI/UX
-- **Dark/Light Themes**: Toggle between theme modes
-- **Responsive Design**: Mobile-first design with Tailwind CSS
-- **Real-time Updates**: Live progress tracking and notifications
-- **Accessibility**: WCAG-compliant interface components
-
-## 🛠️ Technology Stack
-
-### Backend Architecture
-- **FastAPI** - High-performance Python web framework
-- **SQLAlchemy** - Powerful ORM with PostgreSQL database
-- **Alembic** - Database migration management
-- **Pydantic** - Data validation and serialization
-- **Passlib + Bcrypt** - Secure password hashing
-- **Python-JOSE** - JWT token management
-- **HTTPx** - Async HTTP client for OAuth integrations
-- **Uvicorn** - Lightning-fast ASGI server
-
-### Frontend Architecture
-- **React 18** - Modern component-based UI framework
-- **TypeScript** - Type-safe JavaScript development
-- **Vite** - Next-generation frontend build tool
-- **Tailwind CSS** - Utility-first CSS framework
-- **React Router DOM** - Client-side routing
-- **React Hook Form** - Performant forms with validation
-- **React Dropzone** - File upload with drag-and-drop
-
-### Development & Deployment
-- **Concurrently** - Run multiple npm scripts simultaneously
-- **ESLint** - Code linting and quality enforcement
-- **Autoprefixer** - CSS vendor prefix automation
-- **PostCSS** - CSS post-processing
-
-## 📁 Project Structure
-
-```
-bulletdrop/
-├── backend/                    # FastAPI backend application
-│   ├── app/
-│   │   ├── api/
-│   │   │   └── routes/        # API endpoint definitions
-│   │   │       ├── auth.py    # Authentication & OAuth
-│   │   │       ├── uploads.py # File upload management
-│   │   │       ├── users.py   # User management
-│   │   │       ├── domains.py # Domain configuration
-│   │   │       └── admin.py   # Admin panel endpoints
-│   │   ├── core/              # Core application logic
-│   │   │   ├── config.py      # Application settings
-│   │   │   ├── database.py    # Database configuration
-│   │   │   └── security.py    # Auth & security utilities
-│   │   ├── models/            # SQLAlchemy database models
-│   │   │   ├── user.py        # User account model
-│   │   │   ├── upload.py      # File upload model
-│   │   │   └── domain.py      # Domain configuration model
-│   │   ├── schemas/           # Pydantic request/response schemas
-│   │   │   ├── auth.py        # Authentication schemas
-│   │   │   ├── upload.py      # Upload schemas
-│   │   │   └── admin.py       # Admin schemas
-│   │   ├── services/          # Business logic layer
-│   │   │   ├── upload_service.py  # File upload operations
-│   │   │   └── oauth.py       # OAuth provider integrations
-│   │   └── main.py            # FastAPI application entry point
-│   ├── migrations/            # Alembic database migrations
-│   ├── uploads/               # File storage directory
-│   └── requirements.txt       # Python dependencies
-├── frontend/                  # React frontend application
-│   ├── src/
-│   │   ├── components/        # Reusable React components
-│   │   │   ├── FileUpload.tsx # Drag-and-drop upload component
-│   │   │   ├── Layout.tsx     # Main application layout
-│   │   │   └── ProtectedRoute.tsx # Authentication guard
-│   │   ├── contexts/          # React context providers
-│   │   │   ├── AuthContext.tsx    # Authentication state
-│   │   │   └── ThemeContext.tsx   # Theme management
-│   │   ├── hooks/             # Custom React hooks
-│   │   │   └── useAuth.ts     # Authentication hook
-│   │   ├── pages/             # Page components
-│   │   │   ├── Home.tsx       # Landing page
-│   │   │   ├── Login.tsx      # User login
-│   │   │   ├── Register.tsx   # User registration
-│   │   │   ├── Dashboard.tsx  # User dashboard
-│   │   │   ├── Uploads.tsx    # File management
-│   │   │   ├── Profile.tsx    # User profiles
-│   │   │   └── AdminDashboard.tsx # Admin panel
-│   │   ├── services/          # API service layer
-│   │   │   ├── api.ts         # Main API service
-│   │   │   └── admin.ts       # Admin API methods
-│   │   ├── types/             # TypeScript type definitions
-│   │   │   ├── auth.ts        # Authentication types
-│   │   │   └── upload.ts      # Upload types
-│   │   ├── App.tsx            # Main application component
-│   │   └── main.tsx           # Application entry point
-│   ├── public/                # Static assets
-│   ├── package.json           # Frontend dependencies
-│   └── vite.config.ts         # Vite configuration
-├── docs/                      # Documentation files
-├── .github/                   # GitHub workflows and templates
-├── package.json               # Root package.json for scripts
-├── README.md                  # Project documentation
-├── TODO.md                    # Development roadmap
-└── NEXT-STEPS.md             # Immediate action items
-```
-
-## 🚀 Getting Started
+## Quick Setup
 
 ### Prerequisites
-- Python 3.8+
-- Node.js 16+
+
+- Node.js (18+)
+- Python (3.9+)
 - PostgreSQL
+- Redis (optional)
 
-### Backend Setup
+### Installation
 
-1. Navigate to backend directory:
+1. **Clone and install dependencies:**
+   ```bash
+   git clone <your-repo-url>
+   cd bulletdrop
+   npm run install:all
+   ```
+
+2. **Database setup:**
+   ```bash
+   # Create PostgreSQL database
+   createdb bulletdrop
+
+   # Create database user
+   psql -c "CREATE USER bulletdrop WITH PASSWORD 'bulletdrop123';"
+   psql -c "GRANT ALL PRIVILEGES ON DATABASE bulletdrop TO bulletdrop;"
+   ```
+
+3. **Backend configuration:**
    ```bash
    cd backend
-   ```
+   cp .env.example .env
+   # Edit .env with your settings (see configuration section below)
 
-2. Create virtual environment:
-   ```bash
+   # Setup Python environment
    python -m venv venv
    source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
    pip install -r requirements.txt
+
+   # Run database migrations
+   alembic upgrade head
+
+   # Create admin user
+   python create_admin.py
    ```
 
-4. Set up environment variables:
+4. **Start development servers:**
    ```bash
-   cp .env.example .env
-   # Edit .env with your database credentials
-   ```
-
-5. Start the server:
-   ```bash
-   uvicorn app.main:app --reload
-   ```
-
-The API will be available at `http://localhost:8000`
-
-### Frontend Setup
-
-1. Navigate to frontend directory:
-   ```bash
-   cd frontend
-   ```
-
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-
-3. Start development server:
-   ```bash
+   # From project root
    npm run dev
    ```
 
-The frontend will be available at `http://localhost:3000`
+   This starts both frontend (http://localhost:5173) and backend (http://localhost:8000).
 
-### Quick Start (All Services)
+## Configuration
 
-From the root directory:
-```bash
-npm run install:all
-npm run dev
+### Backend Environment (.env)
+
+```env
+# Database
+DATABASE_URL=postgresql://bulletdrop:bulletdrop123@localhost/bulletdrop
+
+# Security
+SECRET_KEY=your-super-secret-key-change-this-in-production-make-it-long-and-random
+
+# Upload Configuration
+UPLOAD_DIR=uploads
+MAX_FILE_SIZE=10485760
+
+# CORS - Frontend URLs
+ALLOWED_HOSTS=http://localhost:3000,http://localhost:5173
+
+# Optional: Redis for caching/sessions
+REDIS_URL=redis://localhost:6379
+
+# Optional: Discord OAuth
+DISCORD_CLIENT_ID=your_discord_client_id
+DISCORD_CLIENT_SECRET=your_discord_client_secret
+DISCORD_REDIRECT_URI=http://localhost:3000/auth/discord/callback
+
+# Optional: Custom domain support
+DOMAIN_VALIDATION_ENABLED=false
+CUSTOM_DOMAIN_SUPPORT=false
+
+# Optional: Email configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASSWORD=your-app-password
+FROM_EMAIL=noreply@yourdomain.com
 ```
 
-## 📚 API Documentation
+### Frontend Configuration
 
-Once the backend is running, visit:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+Frontend configuration is handled through environment variables or build-time constants. Create `frontend/.env` if needed:
 
-## 🔧 Development
-
-### Backend Commands
-```bash
-cd backend
-npm run dev          # Start development server
-npm run test         # Run tests
-npm run migrate      # Run database migrations
+```env
+VITE_API_URL=http://localhost:8000
+VITE_DISCORD_CLIENT_ID=your_discord_client_id
 ```
 
-### Frontend Commands
-```bash
-cd frontend
-npm run dev          # Start development server
-npm run build        # Build for production
-npm run preview      # Preview production build
-```
+## Available Scripts
 
-## 📚 Documentation
+### Root Project
+- `npm run dev` - Start both frontend and backend in development mode
+- `npm run build` - Build both frontend and backend for production
+- `npm run install:all` - Install all dependencies
 
-### API Documentation
-- **[API Reference](docs/API.md)** - Complete REST API documentation with examples
-- **Interactive API Docs** - Available at `http://localhost:8000/docs` when running
-- **ReDoc Documentation** - Available at `http://localhost:8000/redoc`
+### Backend (cd backend)
+- `python -m uvicorn app.main:app --reload` - Start backend development server
+- `alembic upgrade head` - Run database migrations
+- `python create_admin.py` - Create admin user
+- `pytest` - Run tests
 
-### Technical Documentation
-- **[Architecture Guide](docs/ARCHITECTURE.md)** - System design and component interactions
-- **[Development Guide](NEXT-STEPS.md)** - Step-by-step development instructions
-- **[Project Roadmap](TODO.md)** - Feature development timeline and priorities
+### Frontend (cd frontend)
+- `npm run dev` - Start frontend development server
+- `npm run build` - Build for production
+- `npm run lint` - Run ESLint
 
-### Code Documentation
-- **Backend**: Comprehensive Python docstrings following Google style
-- **Frontend**: JSDoc comments for all TypeScript components and functions
-- **Type Safety**: Full TypeScript coverage with strict type checking
+## Features
 
-## 🧪 Testing
+- **Image Hosting**: Upload and share images with direct links
+- **Discord Integration**: OAuth login and profile management
+- **Custom Domains**: Support for custom domain routing
+- **Screenshot Tools**: ShareX integration and custom tools
+- **Admin Panel**: User and content management
+- **API**: RESTful API for integrations
 
-### Backend Testing
-```bash
-cd backend
-pip install pytest pytest-asyncio
-pytest tests/
-```
+## API Endpoints
 
-### Frontend Testing
-```bash
-cd frontend
-npm test
-```
+### Authentication
+- `POST /auth/login` - Login with username/password
+- `POST /auth/discord` - Discord OAuth login
+- `POST /auth/logout` - Logout
 
-### API Testing
-Import the Postman collection from `docs/` or use the interactive Swagger UI at `/docs`.
+### File Upload
+- `POST /upload` - Upload image/file
+- `GET /files/{filename}` - Access uploaded files
+- `DELETE /files/{filename}` - Delete file (owner only)
 
-## 🐳 Docker Support
+### User Management
+- `GET /users/me` - Get current user profile
+- `PUT /users/me` - Update profile
+- `GET /users/{username}` - Get user profile
 
-Docker configuration is in development. Current manual setup provides full development capabilities.
+### Admin (requires admin role)
+- `GET /admin/users` - List all users
+- `DELETE /admin/users/{user_id}` - Delete user
+- `GET /admin/files` - List all files
 
-**Planned Docker Features:**
-- Multi-stage builds for optimized production images
-- Docker Compose for full-stack development
-- Health checks and monitoring
-- Automated deployment pipelines
+## Database Schema
 
-## 🔧 Contributing
+The application uses SQLAlchemy with Alembic for migrations. Key models:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Add comprehensive tests for new functionality
-4. Ensure all tests pass and code follows style guidelines
-5. Update documentation for API or architecture changes
-6. Submit a pull request with detailed description
+- **User**: User accounts and profiles
+- **File**: Uploaded files and metadata
+- **Domain**: Custom domain configurations
+- **Session**: User sessions
 
-### Code Style Guidelines
-- **Backend**: Follow PEP 8, use Black formatter, type hints required
-- **Frontend**: ESLint configuration, Prettier formatting, TypeScript strict mode
-- **Documentation**: Keep docstrings and comments up-to-date with code changes
+## Troubleshooting
 
-## 🆘 Support & Community
+### Common Issues
 
-- **Issues**: Report bugs and request features via GitHub Issues
-- **Discussions**: Join community discussions for questions and ideas
-- **Wiki**: Additional documentation and guides (coming soon)
-- **Discord**: Development community chat (coming soon)
+**Database connection fails:**
+- Ensure PostgreSQL is running
+- Check DATABASE_URL in .env
+- Verify database and user exist
 
-## 📝 License
+**Frontend can't connect to backend:**
+- Check ALLOWED_HOSTS in backend .env
+- Verify VITE_API_URL in frontend
+- Ensure backend is running on correct port
 
-MIT License - see LICENSE file for details
+**File uploads fail:**
+- Check UPLOAD_DIR permissions
+- Verify MAX_FILE_SIZE setting
+- Ensure sufficient disk space
 
-## 🙏 Acknowledgments
+**Permission denied errors:**
+- Check file/directory permissions
+- Ensure upload directory is writable
+- Verify database user has correct privileges
 
-- FastAPI for the excellent Python web framework
-- React team for the powerful UI library
-- SQLAlchemy for robust ORM capabilities
-- Tailwind CSS for beautiful, responsive design
-- All open-source contributors who make projects like this possible
+### Development Tips
 
----
+- Use `npm run dev` for hot-reload development
+- Check browser console and backend logs for errors
+- Database changes require new migrations: `alembic revision --autogenerate -m "description"`
+- Reset database: Drop database, recreate, and run `alembic upgrade head`
 
-**Built with ❤️ by the BulletDrop team**# bulletdrop
+## Production Deployment
+
+For production deployment:
+
+1. Set secure SECRET_KEY
+2. Use production database
+3. Configure proper CORS origins
+4. Set up reverse proxy (nginx)
+5. Use HTTPS
+6. Configure file upload limits
+7. Set up monitoring and backups
+
+## License
+
+MIT

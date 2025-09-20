@@ -19,7 +19,7 @@ import { User, LoginCredentials, RegisterCredentials, AuthToken } from '../types
 import { Upload, UploadListResponse } from '../types/upload';
 
 /** Base URL for the BulletDrop API */
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 /**
  * Centralized API service class for interacting with the BulletDrop backend.

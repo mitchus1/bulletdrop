@@ -151,7 +151,8 @@ export default function Profile() {
 
   const fetchProfile = async () => {
     try {
-      const response = await fetch(`http://localhost:8000/users/${username}`)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/users/${username}`)
 
       if (!response.ok) {
         if (response.status === 404) {
@@ -186,7 +187,8 @@ export default function Profile() {
     if (!token) return
 
     try {
-      const response = await fetch('http://localhost:8000/users/me', {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/users/me`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

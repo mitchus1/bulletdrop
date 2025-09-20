@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form, Query, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -29,6 +29,7 @@ async def sync_user_counts(user: User, db: Session):
 
 @router.post("/", response_model=UploadResponse)
 async def upload_file(
+    request: Request,
     file: UploadFile = File(...),
     custom_name: Optional[str] = Form(None),
     domain_id: Optional[int] = Form(None),
@@ -44,7 +45,8 @@ async def upload_file(
             file=file,
             custom_name=custom_name,
             domain_id=domain_id,
-            is_public=is_public
+            is_public=is_public,
+            request_host=request.headers.get("host")
         )
         return upload
     except Exception as e:
@@ -55,6 +57,7 @@ async def upload_file(
 
 @router.post("/sharex", response_model=ShareXResponse)
 async def upload_file_sharex(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
@@ -65,13 +68,19 @@ async def upload_file_sharex(
             db=db,
             user=current_user,
             file=file,
-            is_public=True
+            is_public=True,
+            request_host=request.headers.get("host")
         )
+
+        # Generate deletion URL with same host
+        host = request.headers.get("host")
+        protocol = "https" if host != "localhost:8000" else "http"
+        deletion_url = f"{protocol}://{host}/api/uploads/{upload.id}/delete"
 
         return ShareXResponse(
             url=upload.upload_url,
             thumbnail_url=upload.upload_url if upload.mime_type.startswith('image/') else None,
-            deletion_url=f"http://localhost:8000/api/uploads/{upload.id}/delete"  # TODO: Make configurable
+            deletion_url=deletion_url
         )
     except Exception as e:
         raise HTTPException(

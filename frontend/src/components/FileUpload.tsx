@@ -22,7 +22,6 @@ import React, { useState, useRef, useCallback } from 'react';
 import { apiService } from '../services/api';
 import { Upload, UploadProgress } from '../types/upload';
 import { useAuth } from '../hooks/useAuth';
-import { useTheme } from '../contexts/ThemeContext';
 
 /**
  * Props for the FileUpload component.
@@ -69,7 +68,6 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const [selectedDomain, setSelectedDomain] = useState<number | undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
   const { isAuthenticated, refreshUser } = useAuth();
-  const { theme } = useTheme();
 
   // Load domains on component mount
   React.useEffect(() => {

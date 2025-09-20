@@ -25,7 +25,8 @@ export default function OAuthCallback() {
       }
 
       try {
-        const response = await fetch(`http://localhost:8000/auth/oauth/${provider}/callback`, {
+        const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const response = await fetch(`${apiUrl}/auth/oauth/${provider}/callback`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -43,14 +44,14 @@ export default function OAuthCallback() {
         localStorage.setItem('token', tokenData.access_token)
 
         // Use the auth context to set the user state
-        const userResponse = await fetch('http://localhost:8000/auth/me', {
+        const userResponse = await fetch(`${apiUrl}/auth/me`, {
           headers: {
             'Authorization': `Bearer ${tokenData.access_token}`,
           },
         })
 
         if (userResponse.ok) {
-          const userData = await userResponse.json()
+          await userResponse.json()
           // Manually trigger auth state update
           window.location.href = '/dashboard'
         } else {

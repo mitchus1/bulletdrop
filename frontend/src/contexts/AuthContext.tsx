@@ -113,6 +113,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const handleOAuthToken = async (tokenFromUrl: string) => {
+    try {
+      setLoading(true);
+      
+      // Set token
+      setToken(tokenFromUrl);
+      apiService.setToken(tokenFromUrl);
+      localStorage.setItem('token', tokenFromUrl);
+
+      // Get user data
+      const userData = await apiService.getCurrentUser();
+      setUser(userData);
+      
+      return true;
+    } catch (error) {
+      console.error('Failed to handle OAuth token:', error);
+      // Clear invalid token
+      localStorage.removeItem('token');
+      apiService.setToken(null);
+      setToken(null);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const value: AuthContextType = {
     user,
     token,
@@ -120,6 +146,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     register,
     logout,
     refreshUser,
+    handleOAuthToken,
     loading,
     isAuthenticated,
   };

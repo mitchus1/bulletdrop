@@ -4,19 +4,23 @@ from typing import List
 class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = "postgresql://user:password@localhost/bulletdrop"
-    
+
     # Security
     SECRET_KEY: str = "your-secret-key-change-this-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    
+    ENVIRONMENT: str = "development"
+
     # CORS
     ALLOWED_HOSTS: str = "http://localhost:3000,http://localhost:5173"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
     
     # File Upload
-    UPLOAD_DIR: str = "uploads"
+    UPLOAD_DIR: str = "/mnt/bulletdrop-storage/uploads"
     MAX_FILE_SIZE: int = 10 * 1024 * 1024  # 10MB
     ALLOWED_EXTENSIONS: List[str] = [".jpg", ".jpeg", ".png", ".gif", ".webp"]
+    UPLOAD_MAX_SIZE: int = 10 * 1024 * 1024  # 10MB
+    UPLOAD_ALLOWED_TYPES: str = "image/jpeg,image/png,image/gif,image/webp"
     
     # Custom Domains
     AVAILABLE_DOMAINS: List[str] = [
@@ -35,7 +39,10 @@ class Settings(BaseSettings):
     DISCORD_CLIENT_SECRET: str = ""
 
     # OAuth Redirect URLs
-    FRONTEND_URL: str = "http://localhost:5173"
+    FRONTEND_URL: str = "https://mitchus.me"
+    
+    # Base URL for file uploads (will be overridden by request host if not set)
+    BASE_URL: str = ""
     
     @property
     def allowed_hosts_list(self) -> List[str]:

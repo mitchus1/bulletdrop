@@ -110,14 +110,20 @@ class UploadService:
             }
             return mime_map.get(ext, 'application/octet-stream')
 
-    def generate_upload_url(self, filename: str, domain: Optional[Domain] = None) -> str:
+    def generate_upload_url(self, filename: str, domain: Optional[Domain] = None, request_host: Optional[str] = None) -> str:
         """Generate public URL for uploaded file"""
         if domain:
             base_url = f"https://{domain.domain_name}"
+        elif request_host:
+            # Use the request host header for dynamic domain support
+            protocol = "https" if request_host != "localhost:8000" else "http"
+            base_url = f"{protocol}://{request_host}"
+        elif settings.BASE_URL:
+            base_url = settings.BASE_URL
         else:
-            base_url = "http://localhost:8000"  # TODO: Make configurable
+            base_url = "http://localhost:8000"  # Fallback for development
 
-        return f"{base_url}/static/{filename}"
+        return f"{base_url}/uploads/{filename}"
 
     async def create_upload_record(
         self,
@@ -127,7 +133,8 @@ class UploadService:
         file_path: str,
         custom_name: Optional[str] = None,
         domain_id: Optional[int] = None,
-        is_public: bool = True
+        is_public: bool = True,
+        request_host: Optional[str] = None
     ) -> Upload:
         """Create upload record in database"""
 
@@ -159,7 +166,7 @@ class UploadService:
 
         # Generate unique filename for URL
         unique_filename = self.generate_unique_filename(file_info["original_filename"])
-        upload_url = self.generate_upload_url(file_path, domain)
+        upload_url = self.generate_upload_url(file_path, domain, request_host)
 
         # Create upload record
         upload = Upload(
@@ -201,7 +208,8 @@ class UploadService:
         file: UploadFile,
         custom_name: Optional[str] = None,
         domain_id: Optional[int] = None,
-        is_public: bool = True
+        is_public: bool = True,
+        request_host: Optional[str] = None
     ) -> Upload:
         """Complete file upload process"""
 
@@ -223,7 +231,7 @@ class UploadService:
 
         # Create database record
         upload = await self.create_upload_record(
-            db, user, file_info, file_path, custom_name, domain_id, is_public
+            db, user, file_info, file_path, custom_name, domain_id, is_public, request_host
         )
 
         return upload

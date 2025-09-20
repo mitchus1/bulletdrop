@@ -1,4 +1,35 @@
+import { useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+
 export default function Home() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const { handleOAuthToken, isAuthenticated } = useAuth()
+
+  useEffect(() => {
+    const token = searchParams.get('token')
+    const authStatus = searchParams.get('auth')
+    
+    if (token && authStatus === 'success') {
+      handleOAuthToken(token).then((success) => {
+        if (success) {
+          navigate('/dashboard', { replace: true })
+        } else {
+          console.error('Failed to handle OAuth token')
+          navigate('/', { replace: true })
+        }
+      })
+    }
+  }, [searchParams, handleOAuthToken, navigate])
+
+  // If already authenticated, redirect to dashboard
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard')
+    }
+  }, [isAuthenticated, navigate])
+
   return (
     <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
       <div className="text-center">

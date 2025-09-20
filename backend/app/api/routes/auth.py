@@ -336,3 +336,25 @@ async def oauth_callback(provider: str, callback_data: OAuthCallback, db: Sessio
 
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"OAuth authentication failed: {str(e)}")
+
+@router.get("/callback/{provider}")
+async def oauth_callback_get(provider: str, code: str, db: Session = Depends(get_db)):
+    """Handle OAuth GET callback from OAuth providers like Google."""
+    if provider not in ['google', 'github', 'discord']:
+        raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
+    
+    # Convert GET request to POST format and reuse the existing logic
+    from app.schemas.auth import OAuthCallback
+    callback_data = OAuthCallback(code=code)
+    
+    # Call the existing POST callback handler to get the token
+    token_response = await oauth_callback(provider, callback_data, db)
+    
+    # Redirect to frontend with the token
+    frontend_url = settings.FRONTEND_URL
+    access_token = token_response["access_token"]
+    
+    # Redirect to frontend with token in URL parameters
+    redirect_url = f"{frontend_url}?token={access_token}&auth=success"
+    
+    return RedirectResponse(url=redirect_url)

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useTheme } from '../contexts/ThemeContext';
 import { apiService } from '../services/api';
 import { Upload } from '../types/upload';
 import FileUpload from '../components/FileUpload';
@@ -12,7 +11,6 @@ export default function Uploads() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const { isAuthenticated } = useAuth();
-  const { theme } = useTheme();
 
   useEffect(() => {
     if (isAuthenticated) {

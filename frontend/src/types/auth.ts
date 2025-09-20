@@ -39,6 +39,7 @@ export interface AuthContextType {
   register: (credentials: RegisterCredentials) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
+  handleOAuthToken: (token: string) => Promise<boolean>;
   loading: boolean;
   isAuthenticated: boolean;
 }
