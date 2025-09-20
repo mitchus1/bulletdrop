@@ -33,10 +33,13 @@ class Settings(BaseSettings):
     # OAuth Settings
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
+    GOOGLE_REDIRECT_URI: str = ""
     GITHUB_CLIENT_ID: str = ""
     GITHUB_CLIENT_SECRET: str = ""
+    GITHUB_REDIRECT_URI: str = ""
     DISCORD_CLIENT_ID: str = ""
     DISCORD_CLIENT_SECRET: str = ""
+    DISCORD_REDIRECT_URI: str = ""
 
     # OAuth Redirect URLs
     FRONTEND_URL: str = "https://mitchus.me"

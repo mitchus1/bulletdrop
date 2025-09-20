@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/api';
 import { Upload } from '../types/upload';
+import { useToast } from '../contexts/ToastContext';
+import { SkeletonTable } from '../components/Skeleton';
 import FileUpload from '../components/FileUpload';
 
 export default function Uploads() {
@@ -11,6 +13,7 @@ export default function Uploads() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(false);
   const { isAuthenticated } = useAuth();
+  const { success, error: showError } = useToast();
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -50,15 +53,17 @@ export default function Uploads() {
     try {
       await apiService.deleteUpload(uploadId);
       setUploads(prev => prev.filter(upload => upload.id !== uploadId));
+      success('Upload deleted successfully');
     } catch (err) {
-      alert('Failed to delete upload');
+      showError('Failed to delete upload', err instanceof Error ? err.message : 'Unknown error');
     }
   };
 
   const copyToClipboard = (url: string) => {
     navigator.clipboard.writeText(url).then(() => {
-      // You could add a toast notification here
-      alert('URL copied to clipboard!');
+      success('URL copied to clipboard!');
+    }).catch(() => {
+      showError('Failed to copy URL', 'Please copy manually');
     });
   };
 
@@ -115,10 +120,7 @@ export default function Uploads() {
           )}
 
           {loading && uploads.length === 0 ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-              <p className="mt-2 text-gray-600 dark:text-gray-400">Loading uploads...</p>
-            </div>
+            <SkeletonTable rows={5} columns={5} />
           ) : uploads.length === 0 ? (
             <div className="text-center py-8">
               <svg className="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">

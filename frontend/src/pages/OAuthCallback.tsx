@@ -26,7 +26,7 @@ export default function OAuthCallback() {
 
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-        const response = await fetch(`${apiUrl}/auth/oauth/${provider}/callback`, {
+        const response = await fetch(`${apiUrl}/auth/${provider}/callback`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

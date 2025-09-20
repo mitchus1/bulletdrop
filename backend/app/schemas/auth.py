@@ -38,12 +38,15 @@ class UserResponse(BaseModel):
     background_color: Optional[str] = None
     favorite_song: Optional[str] = None
     custom_domain: Optional[str] = None
+    preferred_domain_id: Optional[int] = None
     storage_used: int
     storage_limit: int
     upload_count: int
     is_active: bool
     is_admin: bool
     is_verified: bool
+    is_premium: bool = False
+    premium_expires_at: Optional[datetime] = None
     created_at: datetime
     last_login: Optional[datetime] = None
 

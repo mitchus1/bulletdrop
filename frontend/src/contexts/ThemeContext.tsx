@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 
-type Theme = 'light' | 'dark';
+type Theme = 'light' | 'dark' | 'discord';
 
 interface ThemeContextType {
   theme: Theme;
@@ -28,10 +28,28 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   }, []);
 
   const updateDocumentTheme = (newTheme: Theme) => {
+    // Remove all theme classes
+    document.documentElement.classList.remove('dark', 'discord');
+    
     if (newTheme === 'dark') {
       document.documentElement.classList.add('dark');
+    } else if (newTheme === 'discord') {
+      document.documentElement.classList.add('discord', 'dark');
+      // Add Discord-specific styling
+      document.documentElement.style.setProperty('--discord-bg', '#36393f');
+      document.documentElement.style.setProperty('--discord-secondary', '#2f3136');
+      document.documentElement.style.setProperty('--discord-tertiary', '#202225');
+      document.documentElement.style.setProperty('--discord-accent', '#7289da');
+      document.documentElement.style.setProperty('--discord-pink', '#ff73fa');
+      document.documentElement.style.setProperty('--discord-green', '#43b581');
     } else {
-      document.documentElement.classList.remove('dark');
+      // Light theme
+      document.documentElement.style.removeProperty('--discord-bg');
+      document.documentElement.style.removeProperty('--discord-secondary');
+      document.documentElement.style.removeProperty('--discord-tertiary');
+      document.documentElement.style.removeProperty('--discord-accent');
+      document.documentElement.style.removeProperty('--discord-pink');
+      document.documentElement.style.removeProperty('--discord-green');
     }
   };
 
@@ -42,7 +60,9 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
   };
 
   const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
+    const themeOrder: Theme[] = ['light', 'dark', 'discord'];
+    const currentIndex = themeOrder.indexOf(theme);
+    const newTheme = themeOrder[(currentIndex + 1) % themeOrder.length];
     setTheme(newTheme);
   };
 

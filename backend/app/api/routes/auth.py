@@ -146,13 +146,21 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
     return {"access_token": access_token, "token_type": "bearer"}
 
 # OAuth Routes
-@router.get("/oauth/{provider}")
+@router.get("/auth/{provider}")
 async def oauth_login(provider: str):
     """Initiate OAuth login with the specified provider."""
     if provider not in ['google', 'github', 'discord']:
         raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
 
-    redirect_uri = f"{settings.FRONTEND_URL}/auth/callback/{provider}"
+    # Use the redirect URI from environment variables
+    if provider == 'google':
+        redirect_uri = settings.GOOGLE_REDIRECT_URI
+    elif provider == 'github':
+        redirect_uri = settings.GITHUB_REDIRECT_URI
+    elif provider == 'discord':
+        redirect_uri = settings.DISCORD_REDIRECT_URI
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
 
     # Build authorization URL manually for each provider
     if provider == 'google':
@@ -182,7 +190,23 @@ async def oauth_login(provider: str):
 
     return RedirectResponse(url=auth_url)
 
-@router.post("/oauth/{provider}/callback", response_model=Token)
+@router.get("/auth/{provider}/callback")
+async def oauth_callback_get(provider: str, code: str, db: Session = Depends(get_db)):
+    """Handle OAuth callback from provider (GET request with query params)."""
+    try:
+        # Create a fake OAuthCallback object for the POST handler
+        from app.schemas.auth import OAuthCallback
+        callback_data = OAuthCallback(code=code)
+        token_response = await oauth_callback(provider, callback_data, db)
+        # Redirect to frontend with token
+        frontend_url = f"{settings.FRONTEND_URL}/?token={token_response['access_token']}"
+        return RedirectResponse(url=frontend_url)
+    except Exception as e:
+        # Redirect to frontend with error
+        error_url = f"{settings.FRONTEND_URL}/login?error=oauth_failed"
+        return RedirectResponse(url=error_url)
+
+@router.post("/auth/{provider}/callback", response_model=Token)
 async def oauth_callback(provider: str, callback_data: OAuthCallback, db: Session = Depends(get_db)):
     """Handle OAuth callback and create/login user."""
     code = callback_data.code
@@ -193,7 +217,15 @@ async def oauth_callback(provider: str, callback_data: OAuthCallback, db: Sessio
         import httpx
 
         # Exchange code for access token
-        redirect_uri = f"{settings.FRONTEND_URL}/auth/callback/{provider}"
+        # Use the redirect URI from environment variables
+        if provider == 'google':
+            redirect_uri = settings.GOOGLE_REDIRECT_URI
+        elif provider == 'github':
+            redirect_uri = settings.GITHUB_REDIRECT_URI
+        elif provider == 'discord':
+            redirect_uri = settings.DISCORD_REDIRECT_URI
+        else:
+            raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
 
         if provider == 'google':
             token_url = "https://oauth2.googleapis.com/token"

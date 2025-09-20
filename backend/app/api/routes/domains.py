@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import get_current_active_user
@@ -9,11 +10,140 @@ from app.models.domain import Domain, UserDomain
 
 router = APIRouter()
 
+class DomainCreateRequest(BaseModel):
+    domain_name: str
+    display_name: str
+    description: str = ""
+    is_available: bool = True
+    is_premium: bool = False
+    max_file_size: int = 10 * 1024 * 1024  # 10MB default
+
 @router.get("/")
-async def get_available_domains(db: Session = Depends(get_db)):
-    """Get list of available domains"""
+async def get_available_domains(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get list of available domains (filtered by user access level)"""
     domains = db.query(Domain).filter(Domain.is_available == True).all()
-    return {"domains": domains}
+    
+    # Filter domains based on user premium access
+    accessible_domains = []
+    for domain in domains:
+        if current_user.is_premium_eligible_for_domain(domain):
+            accessible_domains.append(domain)
+    
+    return {"domains": accessible_domains}
+
+@router.post("/create")
+async def create_domain(
+    domain_data: DomainCreateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Create a new domain (admin only)"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    # Check if domain already exists
+    existing_domain = db.query(Domain).filter(Domain.domain_name == domain_data.domain_name).first()
+    if existing_domain:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Domain already exists"
+        )
+    
+    # Create new domain
+    new_domain = Domain(
+        domain_name=domain_data.domain_name,
+        display_name=domain_data.display_name,
+        description=domain_data.description,
+        is_available=domain_data.is_available,
+        is_premium=domain_data.is_premium,
+        max_file_size=domain_data.max_file_size
+    )
+    
+    db.add(new_domain)
+    db.commit()
+    db.refresh(new_domain)
+    
+    return {"message": "Domain created successfully", "domain": new_domain}
+
+class DomainUpdateRequest(BaseModel):
+    display_name: str = None
+    description: str = None
+    is_available: bool = None
+    is_premium: bool = None
+    max_file_size: int = None
+
+@router.patch("/{domain_id}")
+async def update_domain(
+    domain_id: int,
+    domain_data: DomainUpdateRequest,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Update a domain (admin only)"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    domain = db.query(Domain).filter(Domain.id == domain_id).first()
+    if not domain:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Domain not found"
+        )
+    
+    # Update only provided fields
+    update_data = domain_data.dict(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(domain, field, value)
+    
+    db.commit()
+    db.refresh(domain)
+    
+    return {"message": "Domain updated successfully", "domain": domain}
+
+@router.delete("/{domain_id}")
+async def delete_domain(
+    domain_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Delete a domain (admin only)"""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    domain = db.query(Domain).filter(Domain.id == domain_id).first()
+    if not domain:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Domain not found"
+        )
+    
+    # Check if domain has uploads or users
+    from app.models.upload import Upload
+    uploads_count = db.query(Upload).filter(Upload.domain_id == domain_id).count()
+    users_count = db.query(UserDomain).filter(UserDomain.domain_id == domain_id).count()
+    
+    if uploads_count > 0 or users_count > 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot delete domain with {uploads_count} uploads and {users_count} users"
+        )
+    
+    db.delete(domain)
+    db.commit()
+    
+    return {"message": "Domain deleted successfully"}
 
 @router.post("/seed")
 async def seed_domains(db: Session = Depends(get_db)):

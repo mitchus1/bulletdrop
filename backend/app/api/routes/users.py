@@ -18,6 +18,7 @@ class UserUpdateRequest(BaseModel):
     background_image: Optional[str] = None
     background_color: Optional[str] = None
     favorite_song: Optional[str] = None
+    preferred_domain_id: Optional[int] = None
 
 @router.get("/{username}", response_model=UserResponse)
 async def get_user_profile(username: str, db: Session = Depends(get_db)):

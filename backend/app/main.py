@@ -48,10 +48,10 @@ app.add_middleware(
 )
 
 # Mount static files directory for serving uploaded content
-app.mount("/static", StaticFiles(directory="uploads"), name="static")
+app.mount("/static", StaticFiles(directory=settings.UPLOAD_DIR), name="static")
 
 # Include API route modules with appropriate prefixes and tags
-app.include_router(auth.router, prefix="/auth", tags=["authentication"])
+app.include_router(auth.router, tags=["authentication"])
 app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(domains.router, prefix="/api/domains", tags=["domains"])

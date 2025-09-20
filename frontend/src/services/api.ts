@@ -123,7 +123,7 @@ class ApiService {
    * ```
    */
   async login(credentials: LoginCredentials): Promise<AuthToken> {
-    return this.request<AuthToken>('/auth/login/json', {
+    return this.request<AuthToken>('/login/json', {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
@@ -150,7 +150,7 @@ class ApiService {
    * @throws Error if not authenticated or token is invalid
    */
   async getCurrentUser(): Promise<User> {
-    return this.request<User>('/auth/me');
+    return this.request<User>('/me');
   }
 
   /**

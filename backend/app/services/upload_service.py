@@ -24,13 +24,21 @@ class UploadService:
         (self.upload_dir / "documents").mkdir(exist_ok=True)
         (self.upload_dir / "other").mkdir(exist_ok=True)
 
-    def validate_file(self, file: UploadFile, user: User) -> dict:
+    def validate_file(self, file: UploadFile, user: User, domain: Optional[Domain] = None) -> dict:
         """Validate uploaded file"""
+        # Determine max file size (domain-specific or global)
+        if domain and domain.max_file_size:
+            max_file_size = domain.max_file_size
+        else:
+            max_file_size = settings.MAX_FILE_SIZE
+        
         # Check file size
-        if file.size and file.size > settings.MAX_FILE_SIZE:
+        if file.size and file.size > max_file_size:
+            domain_name = domain.display_name or domain.domain_name if domain else "default"
+            max_mb = max_file_size / (1024 * 1024)
             raise HTTPException(
                 status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File too large. Maximum size: {settings.MAX_FILE_SIZE} bytes"
+                detail=f"File too large for {domain_name}. Maximum size: {max_mb:.1f} MB"
             )
 
         # Check user storage quota
@@ -131,8 +139,9 @@ class UploadService:
         user: User,
         file_info: dict,
         file_path: str,
+        unique_filename: str,
         custom_name: Optional[str] = None,
-        domain_id: Optional[int] = None,
+        domain: Optional[Domain] = None,
         is_public: bool = True,
         request_host: Optional[str] = None
     ) -> Upload:
@@ -154,18 +163,7 @@ class UploadService:
                 detail="File already exists"
             )
 
-        # Get domain if specified
-        domain = None
-        if domain_id:
-            domain = db.query(Domain).filter(Domain.id == domain_id).first()
-            if not domain or not domain.is_available:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or unavailable domain"
-                )
-
         # Generate unique filename for URL
-        unique_filename = self.generate_unique_filename(file_info["original_filename"])
         upload_url = self.generate_upload_url(file_path, domain, request_host)
 
         # Create upload record
@@ -178,7 +176,7 @@ class UploadService:
             file_hash=file_hash,
             upload_url=upload_url,
             custom_name=custom_name,
-            domain_id=domain_id,
+            domain_id=domain.id if domain else None,
             is_public=is_public
         )
 
@@ -213,8 +211,18 @@ class UploadService:
     ) -> Upload:
         """Complete file upload process"""
 
-        # Validate file
-        file_info = self.validate_file(file, user)
+        # Get domain if specified
+        domain = None
+        if domain_id:
+            domain = db.query(Domain).filter(Domain.id == domain_id).first()
+            if not domain or not domain.is_available:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or unavailable domain"
+                )
+
+        # Validate file (including domain-specific limits)
+        file_info = self.validate_file(file, user, domain)
 
         # Generate unique filename
         unique_filename = self.generate_unique_filename(file_info["original_filename"])
@@ -231,7 +239,7 @@ class UploadService:
 
         # Create database record
         upload = await self.create_upload_record(
-            db, user, file_info, file_path, custom_name, domain_id, is_public, request_host
+            db, user, file_info, file_path, unique_filename, custom_name, domain, is_public, request_host
         )
 
         return upload

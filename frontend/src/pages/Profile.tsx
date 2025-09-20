@@ -1,7 +1,8 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
+import { SkeletonProfile } from '../components/Skeleton'
 
 interface UserProfile {
   id: number
@@ -16,86 +17,47 @@ interface UserProfile {
   background_image?: string
   background_color?: string
   favorite_song?: string
+  preferred_domain_id?: number
   created_at: string
   upload_count: number
   storage_used: number
   storage_limit: number
+  is_premium?: boolean
+  premium_expires_at?: string
 }
 
-// Spiderweb animation component
-const SpiderwebBackground = ({ mousePosition, isDark }: { mousePosition: { x: number; y: number }, isDark: boolean }) => {
-  return (
-    <svg
-      className="absolute inset-0 w-full h-full opacity-20 pointer-events-none"
-      style={{ 
-        transform: `translate(${mousePosition.x * 0.02}px, ${mousePosition.y * 0.02}px)`,
-        transition: 'transform 0.1s ease-out'
-      }}
-    >
-      <defs>
-        <radialGradient id="webGradient" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={isDark ? "rgba(255,255,255,0.8)" : "rgba(255,255,255,0.8)"} />
-          <stop offset="100%" stopColor={isDark ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.1)"} />
-        </radialGradient>
-      </defs>
-      
-      {/* Central web pattern */}
-      <g stroke="url(#webGradient)" strokeWidth="1" fill="none">
-        {/* Concentric circles */}
-        {[60, 120, 180, 240].map((radius, i) => (
-          <circle
-            key={`circle-${i}`}
-            cx="50%"
-            cy="50%"
-            r={radius}
-            opacity={1 - i * 0.2}
-            className="animate-pulse"
-            style={{ animationDelay: `${i * 0.5}s`, animationDuration: '3s' }}
-          />
-        ))}
-        
-        {/* Radial lines */}
-        {Array.from({ length: 12 }).map((_, i) => {
-          const angle = (i * 30) * (Math.PI / 180);
-          const x2 = 50 + Math.cos(angle) * 40;
-          const y2 = 50 + Math.sin(angle) * 40;
-          return (
-            <line
-              key={`line-${i}`}
-              x1="50%"
-              y1="50%"
-              x2={`${x2}%`}
-              y2={`${y2}%`}
-              opacity={0.6}
-              className="animate-pulse"
-              style={{ animationDelay: `${i * 0.1}s`, animationDuration: '2s' }}
-            />
-          );
-        })}
-      </g>
-    </svg>
-  );
-};
+interface Domain {
+  id: number
+  domain_name: string
+  display_name: string
+  description?: string
+  is_available: boolean
+  is_premium: boolean
+}
 
-// Floating particles component
-const FloatingParticles = () => {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {Array.from({ length: 20 }).map((_, i) => (
-        <div
-          key={i}
-          className="absolute w-1 h-1 bg-white rounded-full opacity-60 animate-pulse"
-          style={{
-            left: `${Math.random() * 100}%`,
-            top: `${Math.random() * 100}%`,
-            animationDelay: `${Math.random() * 3}s`,
-            animationDuration: `${2 + Math.random() * 2}s`
-          }}
-        />
-      ))}
-    </div>
-  );
-};
+// Matrix rain animation component
+const MatrixBackground = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
+    {Array.from({ length: 15 }).map((_, i) => (
+      <div
+        key={i}
+        className="absolute text-green-400 font-mono text-xs animate-pulse select-none"
+        style={{
+          left: `${(i * 7) % 100}%`,
+          top: '-20px',
+          animation: `matrixRain ${3 + Math.random() * 2}s linear infinite`,
+          animationDelay: `${Math.random() * 2}s`
+        }}
+      >
+        {Array.from({ length: 20 }).map((_, j) => (
+          <div key={j} className="block">
+            {String.fromCharCode(0x30A0 + Math.random() * 96)}
+          </div>
+        ))}
+      </div>
+    ))}
+  </div>
+);
 
 export default function Profile() {
   const { username } = useParams<{ username: string }>()
@@ -107,30 +69,10 @@ export default function Profile() {
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(false)
   const [formData, setFormData] = useState<Partial<UserProfile>>({})
-  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  const headerRef = useRef<HTMLDivElement>(null)
+  const [domains, setDomains] = useState<Domain[]>([])
+  const [loadingDomains, setLoadingDomains] = useState(false)
 
   const isOwnProfile = currentUser?.username === username
-  const isDark = theme === 'dark'
-
-  // Track mouse movement for interactive effects
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (headerRef.current) {
-        const rect = headerRef.current.getBoundingClientRect();
-        setMousePosition({
-          x: ((e.clientX - rect.left) / rect.width - 0.5) * 100,
-          y: ((e.clientY - rect.top) / rect.height - 0.5) * 100
-        });
-      }
-    };
-
-    const header = headerRef.current;
-    if (header) {
-      header.addEventListener('mousemove', handleMouseMove);
-      return () => header.removeEventListener('mousemove', handleMouseMove);
-    }
-  }, []);
 
   // Helper function to get social media URLs
   const getSocialUrl = (platform: string, username: string) => {
@@ -146,8 +88,11 @@ export default function Profile() {
   useEffect(() => {
     if (username) {
       fetchProfile()
+      if (isOwnProfile) {
+        fetchDomains()
+      }
     }
-  }, [username])
+  }, [username, isOwnProfile])
 
   const fetchProfile = async () => {
     try {
@@ -170,6 +115,26 @@ export default function Profile() {
       setError('Failed to load profile')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchDomains = async () => {
+    try {
+      setLoadingDomains(true)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/domains`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+      if (response.ok) {
+        const domainsData = await response.json()
+        setDomains(domainsData)
+      }
+    } catch (error) {
+      console.error('Failed to fetch domains:', error)
+    } finally {
+      setLoadingDomains(false)
     }
   }
 
@@ -209,8 +174,14 @@ export default function Profile() {
     }
   }
 
-  const handleInputChange = (field: keyof UserProfile, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }))
+  const handleInputChange = (field: keyof UserProfile, value: string | number) => {
+    if (field === 'preferred_domain_id') {
+      // Handle preferred_domain_id as a number
+      const numValue = value === '' ? undefined : Number(value)
+      setFormData(prev => ({ ...prev, [field]: numValue }))
+    } else {
+      setFormData(prev => ({ ...prev, [field]: value }))
+    }
   }
 
   const formatBytes = (bytes: number) => {
@@ -225,12 +196,8 @@ export default function Profile() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900 min-h-screen">
-        <div className="animate-pulse">
-          <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded-lg mb-6"></div>
-          <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/4 mb-4"></div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
-        </div>
+      <div className="bg-gray-50 dark:bg-gray-900 min-h-screen">
+        <SkeletonProfile />
       </div>
     )
   }
@@ -255,374 +222,325 @@ export default function Profile() {
   if (!profile) return null
 
   return (
-    <div className="max-w-4xl mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300">
-      {/* Theme Settings - Only for own profile */}
-      {isOwnProfile && (
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6 dark:shadow-gray-900 transform transition-all duration-300 hover:shadow-xl hover:scale-[1.01]">
-          <h2 className="text-xl font-semibold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Theme Settings
-          </h2>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                Choose your preferred theme
-              </label>
-              <div className="grid grid-cols-2 gap-4">
+    <div 
+      className="min-h-screen relative overflow-hidden"
+      style={{
+        backgroundImage: profile.background_image ? `url(${profile.background_image})` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        backgroundColor: profile.background_color || '#667eea',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
+      {/* Matrix animation overlay */}
+      <MatrixBackground />
+      
+      {/* Dark overlay for better readability */}
+      <div className="absolute inset-0 bg-black/20"></div>
+      
+      {/* Hover navbar */}
+      <div className="fixed top-0 left-0 right-0 z-50 transform -translate-y-full hover:translate-y-0 transition-transform duration-300 group">
+        <div className="bg-black/80 backdrop-blur-md text-white p-4">
+          <div className="max-w-6xl mx-auto flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <h1 className="text-xl font-bold">{profile.username}'s Profile</h1>
+              {isOwnProfile && (
                 <button
-                  onClick={() => setTheme('light')}
-                  className={`p-4 rounded-lg border-2 transition-all duration-300 ${
-                    theme === 'light'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg'
-                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-                  }`}
+                  onClick={handleEdit}
+                  className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-sm transition-colors"
                 >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-white to-gray-100 rounded-full border border-gray-300 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    </div>
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900 dark:text-white">Light Mode</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">Clean and bright</div>
-                    </div>
-                  </div>
+                  {editing ? 'Editing...' : 'Edit Profile'}
                 </button>
-                
-                <button
-                  onClick={() => setTheme('dark')}
-                  className={`p-4 rounded-lg border-2 transition-all duration-300 ${
-                    theme === 'dark'
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 shadow-lg'
-                      : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-900 rounded-full border border-gray-600 flex items-center justify-center">
-                      <svg className="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                      </svg>
-                    </div>
-                    <div className="text-left">
-                      <div className="font-medium text-gray-900 dark:text-white">Dark Mode</div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400">Easy on the eyes</div>
-                    </div>
-                  </div>
-                </button>
-              </div>
+              )}
+            </div>
+            <div className="flex items-center space-x-4">
+              {/* Theme toggle */}
+              <button
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors"
+              >
+                {theme === 'light' ? '🌙' : '☀️'}
+              </button>
             </div>
           </div>
         </div>
-      )}
-
-      {/* Enhanced Header with stunning effects */}
-      <div
-        ref={headerRef}
-        className="relative h-64 rounded-xl mb-6 bg-gradient-to-br from-blue-500 via-purple-600 to-pink-500 overflow-hidden shadow-2xl transform transition-all duration-300 hover:scale-[1.02] hover:shadow-3xl dark:shadow-gray-800"
-        style={{
-          backgroundColor: profile.background_color || undefined,
-          backgroundImage: profile.background_image ? `url(${profile.background_image})` : undefined,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-        }}
-      >
-        {/* Spiderweb effect */}
-        <SpiderwebBackground mousePosition={mousePosition} isDark={isDark} />
-        
-        {/* Floating particles */}
-        <FloatingParticles />
-        
-        {/* Animated gradient overlay */}
-        <div className="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-black/40 animate-pulse"></div>
-        
-        {/* Glowing border effect */}
-        <div className="absolute inset-0 rounded-xl border-2 border-white/20 animate-pulse"></div>
-        
-        {/* Profile content */}
-        <div className="absolute bottom-6 left-6 text-white z-10">
-          <div className="flex items-center space-x-6">
-            {profile.avatar_url ? (
-              <div className="relative group">
-                <img
-                  src={profile.avatar_url}
-                  alt={profile.username}
-                  className="w-20 h-20 rounded-full border-4 border-white shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:border-yellow-300 group-hover:shadow-yellow-300/50"
-                />
-                <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-purple-400 opacity-0 group-hover:opacity-30 transition-opacity duration-300"></div>
-              </div>
-            ) : (
-              <div className="relative group">
-                <div className="w-20 h-20 rounded-full bg-gradient-to-r from-gray-300 to-gray-400 border-4 border-white flex items-center justify-center shadow-lg transition-all duration-300 group-hover:scale-110 group-hover:border-yellow-300 group-hover:shadow-yellow-300/50">
-                  <span className="text-gray-600 font-bold text-2xl">
-                    {profile.username.charAt(0).toUpperCase()}
-                  </span>
-                </div>
-                <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-400 to-purple-400 opacity-0 group-hover:opacity-30 transition-opacity duration-300"></div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-white to-gray-200 bg-clip-text text-transparent drop-shadow-lg">
-                {profile.username}
-              </h1>
-              <p className="text-sm opacity-90 backdrop-blur-sm bg-black/20 px-3 py-1 rounded-full">
-                Member since {new Date(profile.created_at).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-        </div>
-        
-        {/* Edit button with enhanced styling */}
-        {isOwnProfile && !editing && (
-          <button
-            onClick={handleEdit}
-            className="absolute top-6 right-6 bg-white/10 hover:bg-white/20 text-white px-6 py-3 rounded-xl backdrop-blur-md border border-white/20 transition-all duration-300 hover:scale-105 hover:shadow-lg group"
-          >
-            <span className="flex items-center space-x-2">
-              <svg className="w-4 h-4 transition-transform group-hover:rotate-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-              </svg>
-              <span>Edit Profile</span>
-            </span>
-          </button>
-        )}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Content */}
-        <div className="lg:col-span-2">
-          {/* Enhanced Bio Section */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6 transform transition-all duration-300 hover:shadow-xl hover:scale-[1.01] dark:shadow-gray-900">
-            <h2 className="text-xl font-semibold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">About</h2>
-            {editing ? (
-              <textarea
-                value={formData.bio || ''}
-                onChange={(e) => handleInputChange('bio', e.target.value)}
-                placeholder="Tell people about yourself..."
-                className="w-full h-24 p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-              />
-            ) : (
-              <p className="text-gray-600 dark:text-gray-300 leading-relaxed">
-                {profile.bio || 'No bio provided yet.'}
-              </p>
-            )}
-          </div>
+      {/* Navbar hover indicator */}
+      <div className="fixed top-0 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-white/30 hover:bg-white/60 rounded-b-full z-40 transition-all duration-300 hover:w-16 hover:h-2"></div>
 
-          {/* Enhanced Social Links with clickable functionality */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6 transform transition-all duration-300 hover:shadow-xl hover:scale-[1.01] dark:shadow-gray-900">
-            <h2 className="text-xl font-semibold mb-6 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Social Links</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {[
-                { field: 'github_username', name: 'GitHub', icon: '🐙', color: 'from-gray-700 to-gray-900' },
-                { field: 'discord_username', name: 'Discord', icon: '🎮', color: 'from-indigo-500 to-purple-600' },
-                { field: 'telegram_username', name: 'Telegram', icon: '✈️', color: 'from-blue-400 to-blue-600' },
-                { field: 'instagram_username', name: 'Instagram', icon: '📸', color: 'from-pink-400 via-red-500 to-yellow-500' }
-              ].map(({ field, name, icon, color }) => (
-                <div key={field} className="group">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    <span className="flex items-center space-x-2">
-                      <span className="text-lg">{icon}</span>
-                      <span>{name}</span>
+      {/* Main content with glassmorphism cards */}
+      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+          
+          {/* Profile Card */}
+          <div className="lg:col-span-1 order-1">
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+              {/* Avatar */}
+              <div className="text-center mb-6">
+                {profile.avatar_url ? (
+                  <img
+                    src={profile.avatar_url}
+                    alt={profile.username}
+                    className="w-32 h-32 rounded-full mx-auto border-4 border-white/30 shadow-lg"
+                  />
+                ) : (
+                  <div className="w-32 h-32 rounded-full bg-white/20 border-4 border-white/30 flex items-center justify-center mx-auto shadow-lg">
+                    <span className="text-white font-bold text-4xl">
+                      {profile.username.charAt(0).toUpperCase()}
                     </span>
-                  </label>
-                  {editing ? (
-                    <input
-                      type="text"
-                      value={formData[field as keyof UserProfile] as string || ''}
-                      onChange={(e) => handleInputChange(field as keyof UserProfile, e.target.value)}
-                      placeholder={`Your ${name} username`}
-                      className="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                    />
-                  ) : (
-                    <div className="relative">
-                      {profile[field as keyof UserProfile] as string ? (
-                        <a
-                          href={getSocialUrl(field.replace('_username', ''), profile[field as keyof UserProfile] as string)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className={`block w-full p-3 rounded-lg bg-gradient-to-r ${color} text-white font-medium transition-all duration-300 transform hover:scale-105 hover:shadow-lg group-hover:shadow-xl`}
-                        >
-                          <span className="flex items-center justify-between">
-                            <span>@{profile[field as keyof UserProfile] as string}</span>
-                            <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                            </svg>
-                          </span>
-                        </a>
-                      ) : (
-                        <div className="w-full p-3 bg-gray-100 dark:bg-gray-700 rounded-lg text-gray-500 dark:text-gray-400 text-center">
-                          Not connected
-                        </div>
-                      )}
+                  </div>
+                )}
+                <h1 className="text-3xl font-bold text-white mt-4 drop-shadow-lg">
+                  {profile.username}
+                </h1>
+                <p className="text-white/80 mt-2">
+                  Member since {new Date(profile.created_at).toLocaleDateString()}
+                </p>
+              </div>
+
+              {/* Stats */}
+              <div className="space-y-4 mb-6">
+                <div>
+                  <div className="flex justify-between text-sm mb-2 text-white/90">
+                    <span>Files uploaded</span>
+                    <span className="font-bold">{profile.upload_count}</span>
+                  </div>
+                  <div className="w-full bg-white/20 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-blue-400 to-purple-400 h-2 rounded-full transition-all duration-500"
+                      style={{ 
+                        width: `${Math.min((profile.upload_count / 100) * 100, 100)}%`
+                      }}
+                    ></div>
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex justify-between text-sm mb-2 text-white/90">
+                    <span>Storage used</span>
+                    <span className="font-medium">
+                      {formatBytes(profile.storage_used)} / {formatBytes(profile.storage_limit)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-white/20 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-green-400 to-blue-400 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${Math.min(storagePercentage, 100)}%` }}
+                    ></div>
+                  </div>
+                  <div className="text-xs text-white/70 mt-1">
+                    {storagePercentage.toFixed(1)}% used
+                  </div>
+                </div>
+                
+                {/* Premium Status */}
+                <div>
+                  <div className="flex justify-between items-center text-sm mb-2 text-white/90">
+                    <span>Account Status</span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      profile.is_premium 
+                        ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' 
+                        : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                    }`}>
+                      {profile.is_premium ? '👑 Premium' : 'Free'}
+                    </span>
+                  </div>
+                  {profile.is_premium && profile.premium_expires_at && (
+                    <div className="text-xs text-white/70">
+                      Premium expires: {new Date(profile.premium_expires_at).toLocaleDateString()}
+                    </div>
+                  )}
+                  {!profile.is_premium && (
+                    <div className="text-xs text-white/70">
+                      Upgrade to Premium for exclusive domains and features
                     </div>
                   )}
                 </div>
-              ))}
+              </div>
+
+              {/* Favorite Song */}
+              {profile.favorite_song && (
+                <div className="bg-white/10 rounded-xl p-4 border border-white/20">
+                  <h3 className="text-white font-semibold mb-2 flex items-center">
+                    🎵 <span className="ml-2">Now Playing</span>
+                  </h3>
+                  <p className="text-white/90 text-sm">{profile.favorite_song}</p>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Customization */}
-          {editing && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 mb-6 dark:shadow-gray-900">
-              <h2 className="text-xl font-semibold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Profile Customization</h2>
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Background Color
-                  </label>
-                  <input
-                    type="color"
-                    value={formData.background_color || '#3B82F6'}
-                    onChange={(e) => handleInputChange('background_color', e.target.value)}
-                    className="w-full h-12 border border-gray-300 dark:border-gray-600 rounded-lg"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Background Image URL
-                  </label>
-                  <input
-                    type="url"
-                    value={formData.background_image || ''}
-                    onChange={(e) => handleInputChange('background_image', e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Favorite Song
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.favorite_song || ''}
-                    onChange={(e) => handleInputChange('favorite_song', e.target.value)}
-                    placeholder="Artist - Song Title"
-                    className="w-full p-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-700 dark:text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-300"
-                  />
-                </div>
-              </div>
+          {/* Content Cards */}
+          <div className="lg:col-span-2 order-2 space-y-6">
+            
+            {/* Bio Card */}
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+              <h2 className="text-2xl font-bold text-white mb-4">About</h2>
+              {editing ? (
+                <textarea
+                  value={formData.bio || ''}
+                  onChange={(e) => handleInputChange('bio', e.target.value)}
+                  placeholder="Tell people about yourself..."
+                  className="w-full h-32 p-4 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
+                />
+              ) : (
+                <p className="text-white/90 text-lg leading-relaxed">
+                  {profile.bio || 'No bio provided yet.'}
+                </p>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Enhanced Sidebar */}
-        <div className="space-y-6">
-          {/* Enhanced Stats */}
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 transform transition-all duration-300 hover:shadow-xl hover:scale-[1.02] dark:shadow-gray-900">
-            <h2 className="text-xl font-semibold mb-4 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Stats</h2>
-            <div className="space-y-4">
-              <div className="group">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600 dark:text-gray-400">Files uploaded</span>
-                  <span className="font-bold text-lg text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform duration-300">{profile.upload_count}</span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-1000 ease-out transform origin-left"
-                    style={{ 
-                      width: `${Math.min((profile.upload_count / 100) * 100, 100)}%`
-                    }}
-                  ></div>
-                </div>
-              </div>
-              
-              <div className="group">
-                <div className="flex justify-between text-sm mb-2">
-                  <span className="text-gray-600 dark:text-gray-400">Storage used</span>
-                  <span className="font-medium group-hover:scale-110 transition-transform duration-300 text-gray-900 dark:text-gray-100">
-                    {formatBytes(profile.storage_used)} / {formatBytes(profile.storage_limit)}
-                  </span>
-                </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3 overflow-hidden shadow-inner">
-                  <div
-                    className="bg-gradient-to-r from-green-400 via-blue-500 to-purple-600 h-3 rounded-full transition-all duration-1000 ease-out relative overflow-hidden"
-                    style={{ width: `${Math.min(storagePercentage, 100)}%` }}
-                  >
-                    <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
+            {/* Social Links Card */}
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+              <h2 className="text-2xl font-bold text-white mb-6">Connect</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {[
+                  { field: 'github_username', name: 'GitHub', icon: '🐙', color: 'from-gray-600 to-gray-800' },
+                  { field: 'discord_username', name: 'Discord', icon: '🎮', color: 'from-indigo-600 to-purple-600' },
+                  { field: 'telegram_username', name: 'Telegram', icon: '✈️', color: 'from-blue-500 to-blue-700' },
+                  { field: 'instagram_username', name: 'Instagram', icon: '📸', color: 'from-pink-500 to-red-500' }
+                ].map(({ field, name, icon, color }) => (
+                  <div key={field}>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      <span className="flex items-center space-x-2">
+                        <span className="text-lg">{icon}</span>
+                        <span>{name}</span>
+                      </span>
+                    </label>
+                    {editing ? (
+                      <input
+                        type="text"
+                        value={formData[field as keyof UserProfile] as string || ''}
+                        onChange={(e) => handleInputChange(field as keyof UserProfile, e.target.value)}
+                        placeholder={`Your ${name} username`}
+                        className="w-full p-3 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
+                      />
+                    ) : (
+                      <div>
+                        {profile[field as keyof UserProfile] as string ? (
+                          <a
+                            href={getSocialUrl(field.replace('_username', ''), profile[field as keyof UserProfile] as string)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={`block w-full p-4 bg-gradient-to-r ${color} rounded-xl text-white hover:scale-105 transform transition-all duration-200 shadow-lg hover:shadow-xl`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">@{profile[field as keyof UserProfile] as string}</span>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </div>
+                          </a>
+                        ) : (
+                          <div className="w-full p-4 bg-white/5 rounded-xl text-white/60 text-center border border-white/10">
+                            Not connected
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-                <div className="text-xs text-gray-500 dark:text-gray-400 mt-2 flex justify-between">
-                  <span>{storagePercentage.toFixed(1)}% used</span>
-                  <span className={`font-medium ${storagePercentage > 90 ? 'text-red-500 animate-pulse' : storagePercentage > 70 ? 'text-yellow-500' : 'text-green-500'}`}>
-                    {storagePercentage > 90 ? '🔴 Almost full!' : storagePercentage > 70 ? '🟡 Getting full' : '🟢 Plenty of space'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Enhanced Favorite Song */}
-          {profile.favorite_song && (
-            <div className="bg-gradient-to-br from-green-400 via-blue-500 to-purple-600 rounded-xl shadow-lg p-6 text-white transform transition-all duration-300 hover:shadow-xl hover:scale-[1.02] relative overflow-hidden">
-              {/* Animated background */}
-              <div className="absolute inset-0 opacity-30">
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-pulse"></div>
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute w-2 h-2 bg-white rounded-full opacity-60"
-                    style={{
-                      left: `${20 + i * 30}%`,
-                      top: `${30 + i * 10}%`,
-                      animation: `float ${2 + i}s ease-in-out infinite`,
-                      animationDelay: `${i * 0.5}s`
-                    }}
-                  />
                 ))}
               </div>
-              
-              <div className="relative z-10">
-                <h2 className="text-xl font-semibold mb-4 flex items-center space-x-2">
-                  <span>🎵 Currently Playing</span>
-                </h2>
-                <div className="flex items-center space-x-4">
-                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/30 group-hover:scale-110 transition-transform duration-300">
-                    <svg className="w-6 h-6 text-white animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.617.816L4.69 13.92a1 1 0 01-.429-.876V7.956a1 1 0 01.429-.876l3.693-2.896A1 1 0 019.383 3.076zM12 5v10a2 2 0 001.789 1.987l.211.013A2 2 0 0016 15V5a2 2 0 00-1.789-1.987L14 3a2 2 0 00-2 2z" clipRule="evenodd" />
-                    </svg>
+            </div>
+
+            {/* Customization Card - Only when editing */}
+            {editing && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+                <h2 className="text-2xl font-bold text-white mb-6">Customize</h2>
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      Background Color
+                    </label>
+                    <input
+                      type="color"
+                      value={formData.background_color || '#667eea'}
+                      onChange={(e) => handleInputChange('background_color', e.target.value)}
+                      className="w-full h-12 bg-white/10 border border-white/20 rounded-lg"
+                    />
                   </div>
-                  <div className="flex-1">
-                    <p className="font-semibold text-lg drop-shadow-lg">{profile.favorite_song}</p>
-                    <p className="text-sm opacity-90">Favorite Song</p>
-                    {/* Sound waves animation */}
-                    <div className="flex items-center space-x-1 mt-2">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="w-1 bg-white rounded-full opacity-70"
-                          style={{
-                            height: `${8 + Math.random() * 12}px`,
-                            animation: `wave ${0.5 + Math.random() * 0.5}s ease-in-out infinite alternate`,
-                            animationDelay: `${i * 0.1}s`
-                          }}
-                        />
-                      ))}
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      Background Image URL
+                    </label>
+                    <input
+                      type="url"
+                      value={formData.background_image || ''}
+                      onChange={(e) => handleInputChange('background_image', e.target.value)}
+                      placeholder="https://example.com/image.jpg"
+                      className="w-full p-3 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      Favorite Song
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.favorite_song || ''}
+                      onChange={(e) => handleInputChange('favorite_song', e.target.value)}
+                      placeholder="Artist - Song Title"
+                      className="w-full p-3 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-white/90 mb-2">
+                      Preferred Domain
+                    </label>
+                    {loadingDomains ? (
+                      <div className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white/60">
+                        Loading domains...
+                      </div>
+                    ) : (
+                      <select
+                        value={formData.preferred_domain_id || ''}
+                        onChange={(e) => handleInputChange('preferred_domain_id', e.target.value)}
+                        className="w-full p-3 bg-white/10 border border-white/20 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
+                      >
+                        <option value="">Select a domain...</option>
+                        {domains.map((domain) => (
+                          <option 
+                            key={domain.id} 
+                            value={domain.id} 
+                            className="bg-gray-800 text-white"
+                            disabled={domain.is_premium && !profile?.is_premium}
+                          >
+                            {domain.display_name || domain.domain_name}
+                            {domain.is_premium ? ' 👑 Premium' : ''}
+                            {domain.is_premium && !profile?.is_premium ? ' (Premium Required)' : ''}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    <p className="text-sm text-white/60 mt-1">
+                      This domain will be used for your ShareX uploads and file URLs
+                    </p>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Edit Buttons */}
+            {editing && (
+              <div className="flex justify-end space-x-4">
+                <button
+                  onClick={handleCancel}
+                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl border border-white/20 transition-colors backdrop-blur-sm"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl transition-colors shadow-lg hover:shadow-xl"
+                >
+                  Save Changes
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Edit Buttons */}
-      {editing && (
-        <div className="flex justify-end space-x-3 mt-6">
-          <button
-            onClick={handleCancel}
-            className="px-6 py-3 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleSave}
-            className="px-6 py-3 bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white rounded-lg transition-all duration-300 shadow-lg hover:shadow-xl"
-          >
-            Save Changes
-          </button>
-        </div>
-      )}
     </div>
   )
 }

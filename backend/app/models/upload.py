@@ -63,7 +63,7 @@ class Upload(Base):
     original_filename = Column(String(255), nullable=False)
     file_size = Column(BigInteger, nullable=False)
     mime_type = Column(String(100), nullable=False)
-    file_hash = Column(String(64), unique=True, nullable=True)  # SHA-256 for deduplication
+    file_hash = Column(String(64), nullable=True)  # SHA-256 for per-user deduplication
     
     # URLs and access
     upload_url = Column(Text, nullable=False)

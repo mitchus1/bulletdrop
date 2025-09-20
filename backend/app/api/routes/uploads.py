@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.security import get_current_active_user
 from app.models.user import User
 from app.models.upload import Upload
+from app.models.domain import Domain
 from app.schemas.upload import UploadResponse, UploadListResponse, ShareXResponse
 from app.services.upload_service import upload_service
 
@@ -64,18 +65,31 @@ async def upload_file_sharex(
 ):
     """Upload endpoint compatible with ShareX and other screenshot tools"""
     try:
+        # Use user's preferred domain if set, otherwise use host header
+        domain_id = current_user.preferred_domain_id
+        
         upload = await upload_service.upload_file(
             db=db,
             user=current_user,
             file=file,
             is_public=True,
+            domain_id=domain_id,
             request_host=request.headers.get("host")
         )
 
-        # Generate deletion URL with same host
-        host = request.headers.get("host")
-        protocol = "https" if host != "localhost:8000" else "http"
-        deletion_url = f"{protocol}://{host}/api/uploads/{upload.id}/delete"
+        # Generate deletion URL with same domain as upload
+        if domain_id:
+            domain = db.query(Domain).filter(Domain.id == domain_id).first()
+            if domain:
+                deletion_url = f"https://{domain.domain_name}/api/uploads/{upload.id}/delete"
+            else:
+                host = request.headers.get("host")
+                protocol = "https" if host != "localhost:8000" else "http"
+                deletion_url = f"{protocol}://{host}/api/uploads/{upload.id}/delete"
+        else:
+            host = request.headers.get("host")
+            protocol = "https" if host != "localhost:8000" else "http"
+            deletion_url = f"{protocol}://{host}/api/uploads/{upload.id}/delete"
 
         return ShareXResponse(
             url=upload.upload_url,

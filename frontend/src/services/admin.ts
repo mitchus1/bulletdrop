@@ -63,7 +63,7 @@ export const createDomain = async (domainData: {
   is_premium?: boolean;
   max_file_size?: number;
 }) => {
-  return await apiService.adminRequest('/domains', {
+  return await apiService.adminRequest('/domains/create', {
     method: 'POST',
     body: JSON.stringify(domainData)
   });

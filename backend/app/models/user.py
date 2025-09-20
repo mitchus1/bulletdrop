@@ -8,7 +8,7 @@ Classes:
     User: SQLAlchemy model representing a user account
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Text
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, BigInteger, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
@@ -94,6 +94,7 @@ class User(Base):
     
     # Domain and storage
     custom_domain = Column(String(255), nullable=True)
+    preferred_domain_id = Column(Integer, ForeignKey("domains.id"), nullable=True)
     storage_used = Column(BigInteger, default=0)  # bytes
     storage_limit = Column(BigInteger, default=1073741824)  # 1GB default
     upload_count = Column(Integer, default=0)
@@ -102,6 +103,12 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
+    
+    # Premium subscription
+    is_premium = Column(Boolean, default=False)
+    premium_expires_at = Column(DateTime, nullable=True)
+    stripe_customer_id = Column(String(255), nullable=True)  # For future Stripe integration
+    subscription_id = Column(String(255), nullable=True)  # For future subscription management
     
     # API access
     api_key = Column(String(255), unique=True, nullable=True)
@@ -114,3 +121,18 @@ class User(Base):
     # Relationships
     uploads = relationship("Upload", back_populates="user", cascade="all, delete-orphan")
     user_domains = relationship("UserDomain", back_populates="user", cascade="all, delete-orphan")
+    preferred_domain = relationship("Domain", foreign_keys=[preferred_domain_id])
+    
+    def has_active_premium(self) -> bool:
+        """Check if user has active premium subscription"""
+        if not self.is_premium:
+            return False
+        if self.premium_expires_at is None:
+            return True  # Lifetime premium
+        return datetime.utcnow() < self.premium_expires_at
+    
+    def is_premium_eligible_for_domain(self, domain) -> bool:
+        """Check if user can access a premium domain"""
+        if not domain.is_premium:
+            return True  # Non-premium domains are available to everyone
+        return self.is_admin or self.has_active_premium()

@@ -39,6 +39,157 @@
   }
 }
 
+/* Discord-Kiddy Style Animations */
+@keyframes discordFloat {
+  0%, 100% {
+    transform: translateY(0px) scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: translateY(-20px) scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes matrixRain {
+  0% {
+    transform: translateY(-100vh);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(100vh);
+    opacity: 0;
+  }
+}
+
+@keyframes marquee {
+  0% {
+    transform: translateX(100%);
+  }
+  100% {
+    transform: translateX(-100%);
+  }
+}
+
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+  }
+  20% {
+    transform: translate(-2px, 2px);
+  }
+  40% {
+    transform: translate(-2px, -2px);
+  }
+  60% {
+    transform: translate(2px, 2px);
+  }
+  80% {
+    transform: translate(2px, -2px);
+  }
+  100% {
+    transform: translate(0);
+  }
+}
+
+@keyframes rgbBorder {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+@keyframes neonGlow {
+  0%, 100% {
+    box-shadow: 
+      0 0 5px currentColor,
+      0 0 10px currentColor,
+      0 0 15px currentColor,
+      0 0 20px currentColor;
+  }
+  50% {
+    box-shadow: 
+      0 0 10px currentColor,
+      0 0 20px currentColor,
+      0 0 30px currentColor,
+      0 0 40px currentColor;
+  }
+}
+
+/* Discord Theme Styles */
+.discord {
+  --tw-bg-gray-50: var(--discord-tertiary);
+  --tw-bg-gray-900: var(--discord-bg);
+  --tw-bg-gray-800: var(--discord-secondary);
+  --tw-bg-gray-700: var(--discord-tertiary);
+}
+
+.discord .bg-gray-50 {
+  background-color: var(--discord-tertiary) !important;
+}
+
+.discord .bg-gray-900 {
+  background-color: var(--discord-bg) !important;
+}
+
+.discord .bg-white {
+  background-color: var(--discord-secondary) !important;
+}
+
+.discord .dark\:bg-gray-800 {
+  background-color: var(--discord-secondary) !important;
+}
+
+.discord .text-gray-900 {
+  color: #ffffff !important;
+}
+
+.discord .dark\:text-white {
+  color: #ffffff !important;
+}
+
+.discord .shadow-lg {
+  box-shadow: 0 0 15px rgba(114, 137, 218, 0.3) !important;
+}
+
+.discord .hover\:shadow-xl:hover {
+  box-shadow: 0 0 25px rgba(255, 115, 250, 0.4) !important;
+}
+
+/* Utility classes for Discord effects */
+.animate-marquee {
+  animation: marquee 20s linear infinite;
+}
+
+.animate-glitch {
+  animation: glitch 0.3s ease-in-out infinite;
+}
+
+.animate-rgb-border {
+  animation: rgbBorder 3s ease infinite;
+  background-size: 400% 400%;
+}
+
+.animate-neon-glow {
+  animation: neonGlow 2s ease-in-out infinite alternate;
+}
+
+.discord-gradient {
+  background: linear-gradient(45deg, #ff0080, #7928ca, #ff0080);
+  background-size: 400% 400%;
+}
+
 /* Enhanced hover effects */
 .hover-lift {
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -78,4 +229,42 @@
     opacity: 0;
     transform: scale(0) rotate(360deg);
   }
+}
+
+/* Navbar hover indicator */
+.navbar-hover-indicator {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 40px;
+  height: 4px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.3), rgba(255,255,255,0.8), rgba(255,255,255,0.3));
+  border-radius: 0 0 8px 8px;
+  z-index: 60;
+  transition: all 0.3s ease;
+}
+
+.navbar-hover-indicator:hover {
+  background: linear-gradient(90deg, rgba(255,255,255,0.5), rgba(255,255,255,1), rgba(255,255,255,0.5));
+  width: 60px;
+  height: 6px;
+}
+
+/* Full screen profile styles */
+.profile-fullscreen {
+  background-attachment: fixed;
+}
+
+/* Improved glassmorphism */
+.glass-card {
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+}
+
+/* Smooth transitions for hover navbar */
+.navbar-slide {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }

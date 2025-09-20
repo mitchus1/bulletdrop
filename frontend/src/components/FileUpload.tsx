@@ -22,6 +22,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { apiService } from '../services/api';
 import { Upload, UploadProgress } from '../types/upload';
 import { useAuth } from '../hooks/useAuth';
+import { useToast } from '../contexts/ToastContext';
 
 /**
  * Props for the FileUpload component.
@@ -68,6 +69,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const [selectedDomain, setSelectedDomain] = useState<number | undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
   const { isAuthenticated, refreshUser } = useAuth();
+  const { success, error } = useToast();
 
   // Load domains on component mount
   React.useEffect(() => {
@@ -80,6 +82,10 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     try {
       const response = await apiService.getAvailableDomains();
       setDomains(response.domains);
+      // Auto-select the first domain if none is selected
+      if (response.domains.length > 0 && !selectedDomain) {
+        setSelectedDomain(response.domains[0].id);
+      }
     } catch (error) {
       console.error('Failed to load domains:', error);
     }
@@ -101,23 +107,34 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     setDragActive(false);
 
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFiles(Array.from(e.dataTransfer.files));
+      handleFiles(e.dataTransfer.files);
     }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     e.preventDefault();
     if (e.target.files && e.target.files[0]) {
-      handleFiles(Array.from(e.target.files));
+      handleFiles(e.target.files);
     }
   };
 
-  const handleFiles = (files: File[]) => {
-    const filesToUpload = files.slice(0, maxFiles);
+    const handleFiles = async (files: FileList | File[]) => {
+    const fileArray = Array.isArray(files) ? files : Array.from(files);
+    if (!fileArray.length) return;
+
+    // Check if a domain is selected
+    if (!selectedDomain) {
+      error('Please select a domain before uploading');
+      return;
+    }
+
+    const filesToUpload = fileArray.slice(0, maxFiles || 10);
+
+    // Create upload entries
     const newUploads: UploadProgress[] = filesToUpload.map(file => ({
       file,
       progress: 0,
-      status: 'pending'
+      status: 'pending' as const,
     }));
 
     setUploads(prev => [...prev, ...newUploads]);
@@ -164,7 +181,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({
       refreshUser().catch(console.error);
 
       // Copy URL to clipboard
-      navigator.clipboard.writeText(result.upload_url).catch(() => {
+      navigator.clipboard.writeText(result.upload_url).then(() => {
+        success('File uploaded successfully!', 'URL copied to clipboard');
+      }).catch(() => {
         // Fallback for older browsers
         const textArea = document.createElement('textarea');
         textArea.value = result.upload_url;
@@ -172,18 +191,21 @@ export const FileUpload: React.FC<FileUploadProps> = ({
         textArea.select();
         document.execCommand('copy');
         document.body.removeChild(textArea);
+        success('File uploaded successfully!', 'URL copied to clipboard');
       });
 
-    } catch (error) {
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Upload failed';
       setUploads(prev => prev.map((upload, i) =>
         i === index
           ? {
               ...upload,
               status: 'error',
-              error: error instanceof Error ? error.message : 'Upload failed'
+              error: errorMessage
             }
           : upload
       ));
+      error('Upload failed', errorMessage);
     }
   };
 
@@ -204,8 +226,11 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   };
 
   const copyToClipboard = (url: string) => {
-    navigator.clipboard.writeText(url);
-    // You could add a toast notification here
+    navigator.clipboard.writeText(url).then(() => {
+      success('URL copied to clipboard!');
+    }).catch(() => {
+      error('Failed to copy URL', 'Please copy manually from the address bar');
+    });
   };
 
   if (!isAuthenticated) {
@@ -229,7 +254,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
             onChange={(e) => setSelectedDomain(e.target.value ? parseInt(e.target.value) : undefined)}
             className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500 transition-colors duration-300"
           >
-            <option value="">Default</option>
+            {!selectedDomain && <option value="">Select a domain...</option>}
             {domains.map(domain => (
               <option key={domain.id} value={domain.id}>
                 {domain.display_name} ({domain.domain_name})

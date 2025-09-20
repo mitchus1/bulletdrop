@@ -362,3 +362,64 @@ async def get_recent_activity(
     activities.sort(key=lambda x: x.timestamp, reverse=True)
     
     return activities[:limit]
+
+# Premium Management Endpoints
+@router.post("/users/{user_id}/premium")
+async def grant_premium(
+    user_id: int,
+    months: int = 1,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Grant premium access to a user (admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Calculate expiration date
+    if user.premium_expires_at and user.premium_expires_at > datetime.utcnow():
+        # Extend existing premium
+        expiration = user.premium_expires_at + timedelta(days=30 * months)
+    else:
+        # New premium subscription
+        expiration = datetime.utcnow() + timedelta(days=30 * months)
+    
+    user.is_premium = True
+    user.premium_expires_at = expiration
+    
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "message": f"Premium granted to {user.username} until {expiration}",
+        "user": user,
+        "expires_at": expiration
+    }
+
+@router.delete("/users/{user_id}/premium")
+async def revoke_premium(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Revoke premium access from a user (admin only)"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    user.is_premium = False
+    user.premium_expires_at = None
+    
+    db.commit()
+    db.refresh(user)
+    
+    return {
+        "message": f"Premium access revoked from {user.username}",
+        "user": user
+    }
