@@ -10,6 +10,9 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Uploads from './pages/Uploads'
 import Profile from './pages/Profile'
+import Settings from './pages/Settings'
+import Premium from './pages/Premium'
+import PremiumSuccess from './pages/PremiumSuccess'
 import AdminDashboard from './pages/AdminDashboard'
 import OAuthCallback from './pages/OAuthCallback'
 
@@ -32,6 +35,21 @@ function App() {
                 <Route path="/uploads" element={
                   <ProtectedRoute>
                     <Uploads />
+                  </ProtectedRoute>
+                } />
+                <Route path="/settings" element={
+                  <ProtectedRoute>
+                    <Settings />
+                  </ProtectedRoute>
+                } />
+                <Route path="/premium" element={
+                  <ProtectedRoute>
+                    <Premium />
+                  </ProtectedRoute>
+                } />
+                <Route path="/premium/success" element={
+                  <ProtectedRoute>
+                    <PremiumSuccess />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin" element={

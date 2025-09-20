@@ -47,6 +47,12 @@ class Settings(BaseSettings):
     # Base URL for file uploads (will be overridden by request host if not set)
     BASE_URL: str = ""
     
+    # Stripe Settings
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
+    STRIPE_PRICE_ID: str = ""  # Monthly subscription price ID
+    
     @property
     def allowed_hosts_list(self) -> List[str]:
         return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]

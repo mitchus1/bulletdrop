@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from app.core.config import settings
-from app.api.routes import auth, users, uploads, domains, admin
+from app.api.routes import auth, users, uploads, domains, admin, stripe
 from app.core.database import engine
 from app.models import User, Upload, Domain
 from app.core.database import Base
@@ -56,6 +56,7 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(domains.router, prefix="/api/domains", tags=["domains"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(stripe.router, prefix="/api/stripe", tags=["stripe"])
 
 
 @app.get("/", summary="Root endpoint", description="Returns API status message")

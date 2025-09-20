@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useTheme } from '../contexts/ThemeContext';
 import { checkAdminAccess, getAdminStats, getAllUsers, getAllDomains, getRecentActivity, createDomain, updateDomain, deleteDomain } from '../services/admin';
 import { useNavigate } from 'react-router-dom';
+import AdminUserManagement from '../components/AdminUserManagement';
+import AdminStatistics from '../components/AdminStatistics';
 
 interface AdminStats {
   total_users: number;
@@ -13,21 +15,6 @@ interface AdminStats {
   total_domains: number;
   available_domains: number;
   premium_domains: number;
-}
-
-interface User {
-  id: number;
-  username: string;
-  email: string;
-  is_active: boolean;
-  is_admin: boolean;
-  is_verified: boolean;
-  storage_used: number;
-  storage_limit: number;
-  upload_count: number;
-  custom_domain?: string;
-  created_at: string;
-  last_login?: string;
 }
 
 interface Domain {
@@ -57,10 +44,9 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [hasAccess, setHasAccess] = useState(false);
   const [stats, setStats] = useState<AdminStats | null>(null);
-  const [users, setUsers] = useState<User[]>([]);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'domains' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'statistics' | 'users' | 'domains' | 'activity'>('overview');
   
   // Domain management state
   const [showDomainModal, setShowDomainModal] = useState(false);
@@ -91,15 +77,14 @@ const AdminDashboard: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [statsData, usersData, domainsData, activitiesData] = await Promise.all([
+            const [statsData, , domainsData, activitiesData] = await Promise.all([
         getAdminStats(),
-        getAllUsers({ limit: 10 }),
+        getAllUsers(), // Still call but don't use result since AdminUserManagement handles this
         getAllDomains(),
-        getRecentActivity(7, 20)
+        getRecentActivity()
       ]);
 
       setStats(statsData as AdminStats);
-      setUsers(usersData as User[]);
       setDomains(domainsData as Domain[]);
       setActivities(activitiesData as Activity[]);
     } catch (error) {
@@ -113,10 +98,6 @@ const AdminDashboard: React.FC = () => {
     const sizes = ['B', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const formatDate = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString();
   };
 
   // Domain management functions
@@ -229,7 +210,8 @@ const AdminDashboard: React.FC = () => {
           <nav className="flex space-x-8">
             {[
               { key: 'overview', label: 'Overview' },
-              { key: 'users', label: 'Users' },
+              { key: 'statistics', label: 'Statistics' },
+              { key: 'users', label: 'User Management' },
               { key: 'domains', label: 'Domains' },
               { key: 'activity', label: 'Activity' }
             ].map((tab) => (
@@ -344,79 +326,14 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Users Tab */}
+        {/* Statistics Tab */}
+        {activeTab === 'statistics' && (
+          <AdminStatistics />
+        )}
+
+        {/* User Management Tab */}
         {activeTab === 'users' && (
-          <div className={`bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden`}>
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-              <h3 className={`text-lg font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                User Management
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className={theme === 'dark' ? 'bg-gray-700' : 'bg-gray-50'}>
-                  <tr>
-                    <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-300' : 'text-gray-500'}`}>
-                      User
-                    </th>
-                    <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-300' : 'text-gray-500'}`}>
-                      Status
-                    </th>
-                    <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-300' : 'text-gray-500'}`}>
-                      Storage
-                    </th>
-                    <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-300' : 'text-gray-500'}`}>
-                      Uploads
-                    </th>
-                    <th className={`px-6 py-3 text-left text-xs font-medium uppercase tracking-wider ${theme === 'dark' ? 'text-gray-300' : 'text-gray-500'}`}>
-                      Joined
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className={`divide-y ${theme === 'dark' ? 'bg-gray-800 divide-gray-700' : 'bg-white divide-gray-200'}`}>
-                  {users.map((user) => (
-                    <tr key={user.id}>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div>
-                            <div className={`text-sm font-medium ${theme === 'dark' ? 'text-white' : 'text-gray-900'}`}>
-                              {user.username}
-                            </div>
-                            <div className={`text-sm ${theme === 'dark' ? 'text-gray-400' : 'text-gray-500'}`}>
-                              {user.email}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center space-x-2">
-                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                            user.is_active ? 'bg-green-100 text-green-800 dark:bg-green-800 dark:text-green-100' : 'bg-red-100 text-red-800 dark:bg-red-800 dark:text-red-100'
-                          }`}>
-                            {user.is_active ? 'Active' : 'Inactive'}
-                          </span>
-                          {user.is_admin && (
-                            <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-800 dark:text-blue-100">
-                              Admin
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                        {formatBytes(user.storage_used)} / {formatBytes(user.storage_limit)}
-                      </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                        {user.upload_count}
-                      </td>
-                      <td className={`px-6 py-4 whitespace-nowrap text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-900'}`}>
-                        {formatDate(user.created_at)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <AdminUserManagement />
         )}
 
         {/* Domains Tab */}

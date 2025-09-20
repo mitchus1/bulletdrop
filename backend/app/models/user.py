@@ -107,7 +107,8 @@ class User(Base):
     # Premium subscription
     is_premium = Column(Boolean, default=False)
     premium_expires_at = Column(DateTime, nullable=True)
-    stripe_customer_id = Column(String(255), nullable=True)  # For future Stripe integration
+    stripe_customer_id = Column(String(255), nullable=True)  # For Stripe integration
+    stripe_subscription_id = Column(String(255), nullable=True)  # Stripe subscription ID
     subscription_id = Column(String(255), nullable=True)  # For future subscription management
     
     # API access

@@ -40,6 +40,14 @@ async def upload_file(
 ):
     """Upload a file"""
     try:
+        # If no domain specified, try to use user's preferred domain
+        if domain_id is None and current_user.preferred_domain_id:
+            preferred_domain = db.query(Domain).filter(Domain.id == current_user.preferred_domain_id).first()
+            if preferred_domain and preferred_domain.is_available:
+                # Check if user can access this domain (premium check)
+                if current_user.is_premium_eligible_for_domain(preferred_domain):
+                    domain_id = current_user.preferred_domain_id
+        
         upload = await upload_service.upload_file(
             db=db,
             user=current_user,
@@ -65,8 +73,14 @@ async def upload_file_sharex(
 ):
     """Upload endpoint compatible with ShareX and other screenshot tools"""
     try:
-        # Use user's preferred domain if set, otherwise use host header
-        domain_id = current_user.preferred_domain_id
+        # Use user's preferred domain if set and accessible
+        domain_id = None
+        if current_user.preferred_domain_id:
+            preferred_domain = db.query(Domain).filter(Domain.id == current_user.preferred_domain_id).first()
+            if preferred_domain and preferred_domain.is_available:
+                # Check if user can access this domain (premium check)
+                if current_user.is_premium_eligible_for_domain(preferred_domain):
+                    domain_id = current_user.preferred_domain_id
         
         upload = await upload_service.upload_file(
             db=db,

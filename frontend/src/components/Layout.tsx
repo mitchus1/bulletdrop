@@ -43,6 +43,12 @@ export default function Layout({ children }: LayoutProps) {
                   <Link to={`/profile/${user?.username}`} className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
                     Profile
                   </Link>
+                  <Link to="/settings" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                    Settings
+                  </Link>
+                  <Link to="/premium" className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors duration-300 px-3 py-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/20 font-medium">
+                    ✨ Premium
+                  </Link>
 
                   {/* Enhanced Admin Status - Only show for admin users */}
                   {user?.is_admin && (
@@ -180,6 +186,20 @@ export default function Layout({ children }: LayoutProps) {
                   onClick={() => setMobileMenuOpen(false)}
                 >
                   Profile
+                </Link>
+                <Link
+                  to="/settings"
+                  className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Settings
+                </Link>
+                <Link
+                  to="/premium"
+                  className="block px-3 py-2 rounded-md text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors duration-300 font-medium"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  ✨ Premium
                 </Link>
 
                 {user?.is_admin && (

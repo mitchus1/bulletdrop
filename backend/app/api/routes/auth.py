@@ -332,14 +332,12 @@ async def oauth_callback(provider: str, callback_data: OAuthCallback, db: Sessio
                         final_username = f"{base_username}_{counter}"
                         counter += 1
 
-                    # Generate a random password hash (user won't use it)
-                    random_password = secrets.token_urlsafe(32)
-                    hashed_password = get_password_hash(random_password)
-
+                    # OAuth users don't have a password initially - set to empty string
+                    # They can set one later if they want password-based login
                     new_user = User(
                         username=final_username,
                         email=email,
-                        hashed_password=hashed_password,
+                        hashed_password="",  # No password for OAuth users initially
                         avatar_url=avatar_url,
                         is_active=True,
                         is_verified=True  # OAuth users are pre-verified

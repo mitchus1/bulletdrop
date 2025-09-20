@@ -10,12 +10,22 @@ class AdminUserResponse(BaseModel):
     is_active: bool
     is_admin: bool
     is_verified: bool
+    is_premium: bool
+    premium_expires_at: Optional[datetime]
     storage_used: int
     storage_limit: int
     upload_count: int
     custom_domain: Optional[str]
     created_at: datetime
     last_login: Optional[datetime]
+    
+    # OAuth provider fields
+    discord_id: Optional[str] = None
+    google_id: Optional[str] = None
+    github_id: Optional[str] = None
+    
+    # Computed field for OAuth providers list
+    oauth_providers: List[str] = []
 
     class Config:
         from_attributes = True

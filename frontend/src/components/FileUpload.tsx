@@ -68,7 +68,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({
   const [domains, setDomains] = useState<any[]>([]);
   const [selectedDomain, setSelectedDomain] = useState<number | undefined>();
   const inputRef = useRef<HTMLInputElement>(null);
-  const { isAuthenticated, refreshUser } = useAuth();
+  const { isAuthenticated, refreshUser, user } = useAuth();
   const { success, error } = useToast();
 
   // Load domains on component mount
@@ -82,9 +82,20 @@ export const FileUpload: React.FC<FileUploadProps> = ({
     try {
       const response = await apiService.getAvailableDomains();
       setDomains(response.domains);
-      // Auto-select the first domain if none is selected
+      
+      // Auto-select user's preferred domain if available and accessible
       if (response.domains.length > 0 && !selectedDomain) {
-        setSelectedDomain(response.domains[0].id);
+        let domainToSelect = response.domains[0].id; // fallback to first domain
+        
+        // If user has a preferred domain, try to use it
+        if (user?.preferred_domain_id) {
+          const preferredDomain = response.domains.find(d => d.id === user.preferred_domain_id);
+          if (preferredDomain) {
+            domainToSelect = preferredDomain.id;
+          }
+        }
+        
+        setSelectedDomain(domainToSelect);
       }
     } catch (error) {
       console.error('Failed to load domains:', error);

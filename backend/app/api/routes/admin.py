@@ -50,7 +50,25 @@ async def get_all_users(
         query = query.filter(User.is_admin == is_admin)
     
     users = query.offset(skip).limit(limit).all()
-    return users
+    
+    # Enhance users with oauth_providers field
+    enhanced_users = []
+    for user in users:
+        user_dict = user.__dict__.copy()
+        
+        # Compute OAuth providers list
+        oauth_providers = []
+        if user.discord_id:
+            oauth_providers.append("discord")
+        if user.google_id:
+            oauth_providers.append("google")
+        if user.github_id:
+            oauth_providers.append("github")
+        
+        user_dict['oauth_providers'] = oauth_providers
+        enhanced_users.append(AdminUserResponse(**user_dict))
+    
+    return enhanced_users
 
 @router.get("/users/{user_id}", response_model=AdminUserResponse)
 async def get_user_by_id(
@@ -65,7 +83,21 @@ async def get_user_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    return user
+    
+    # Enhance user with oauth_providers field
+    user_dict = user.__dict__.copy()
+    
+    # Compute OAuth providers list
+    oauth_providers = []
+    if user.discord_id:
+        oauth_providers.append("discord")
+    if user.google_id:
+        oauth_providers.append("google")
+    if user.github_id:
+        oauth_providers.append("github")
+    
+    user_dict['oauth_providers'] = oauth_providers
+    return AdminUserResponse(**user_dict)
 
 @router.patch("/users/{user_id}")
 async def update_user(
@@ -119,13 +151,133 @@ async def delete_user(
             detail="User not found"
         )
     
+    username = user.username
+    email = user.email
+    
     # Delete user's uploads and related data
+    upload_count = db.query(Upload).filter(Upload.user_id == user_id).count()
     db.query(Upload).filter(Upload.user_id == user_id).delete()
     db.query(UserDomain).filter(UserDomain.user_id == user_id).delete()
     db.delete(user)
     db.commit()
     
-    return {"message": "User deleted successfully"}
+    return {
+        "message": "User deleted successfully", 
+        "deleted_user": {
+            "username": username,
+            "email": email,
+            "uploads_deleted": upload_count
+        }
+    }
+
+@router.get("/statistics")
+async def get_admin_statistics(
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Get comprehensive admin statistics"""
+    
+    # Basic counts
+    total_users = db.query(User).count()
+    active_users = db.query(User).filter(User.is_active == True).count()
+    premium_users = db.query(User).filter(User.is_premium == True).count()
+    admin_users = db.query(User).filter(User.is_admin == True).count()
+    
+    total_uploads = db.query(Upload).count()
+    total_domains = db.query(Domain).count()
+    
+    # Storage statistics
+    total_storage_used = db.query(func.sum(User.storage_used)).scalar() or 0
+    avg_storage_per_user = total_storage_used / total_users if total_users > 0 else 0
+    
+    # Recent activity (last 30 days)
+    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    new_users_30d = db.query(User).filter(User.created_at >= thirty_days_ago).count()
+    new_uploads_30d = db.query(Upload).filter(Upload.created_at >= thirty_days_ago).count()
+    
+    # Daily activity for last 7 days
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    daily_uploads = []
+    daily_users = []
+    
+    for i in range(7):
+        day_start = (datetime.utcnow() - timedelta(days=i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + timedelta(days=1)
+        
+        uploads_count = db.query(Upload).filter(
+            Upload.created_at >= day_start,
+            Upload.created_at < day_end
+        ).count()
+        
+        users_count = db.query(User).filter(
+            User.created_at >= day_start,
+            User.created_at < day_end
+        ).count()
+        
+        daily_uploads.append({
+            "date": day_start.strftime("%Y-%m-%d"),
+            "count": uploads_count
+        })
+        
+        daily_users.append({
+            "date": day_start.strftime("%Y-%m-%d"),
+            "count": users_count
+        })
+    
+    # Top uploaders
+    top_uploaders = db.query(
+        User.username,
+        User.email,
+        User.is_premium,
+        func.count(Upload.id).label('upload_count'),
+        func.sum(Upload.file_size).label('total_size')
+    ).join(Upload).group_by(User.id).order_by(desc(func.count(Upload.id))).limit(10).all()
+    
+    # Domain usage statistics
+    domain_stats = db.query(
+        Domain.domain_name,
+        Domain.is_premium,
+        func.count(Upload.id).label('upload_count')
+    ).join(Upload, Upload.domain_id == Domain.id).group_by(Domain.id).order_by(desc(func.count(Upload.id))).all()
+    
+    return {
+        "overview": {
+            "total_users": total_users,
+            "active_users": active_users,
+            "premium_users": premium_users,
+            "admin_users": admin_users,
+            "total_uploads": total_uploads,
+            "total_domains": total_domains,
+            "total_storage_used": total_storage_used,
+            "avg_storage_per_user": avg_storage_per_user
+        },
+        "recent_activity": {
+            "new_users_30d": new_users_30d,
+            "new_uploads_30d": new_uploads_30d
+        },
+        "daily_activity": {
+            "uploads": daily_uploads,
+            "users": daily_users
+        },
+        "top_uploaders": [
+            {
+                "username": username,
+                "email": email,
+                "is_premium": is_premium,
+                "upload_count": count,
+                "total_size": size or 0
+            }
+            for username, email, is_premium, count, size in top_uploaders
+        ],
+        "domain_usage": [
+            {
+                "domain_name": domain_name,
+                "is_premium": is_premium,
+                "upload_count": count
+            }
+            for domain_name, is_premium, count in domain_stats
+        ]
+    }
 
 # Domain Management Endpoints
 @router.get("/domains", response_model=List[AdminDomainResponse])
