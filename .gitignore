@@ -1,0 +1,8 @@
+/.claude
+/.env.example
+/.github
+/.venv
+/NEXT-STEPS.md
+/TODO.md
+/node_modules
+/backend/.env

@@ -1,0 +1,102 @@
+name: bulletdrop
+region: fra1
+
+# Database
+databases:
+- name: bulletdrop-db
+  engine: PG
+  version: "15"
+  size: basic-xs
+  num_nodes: 1
+
+# Services
+services:
+# Backend API Service
+- name: api
+  source_dir: /backend
+  github:
+    repo: Micheltv10/bulletdrop
+    branch: main
+    deploy_on_push: true
+  run_command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+  environment_slug: python
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  http_port: 8000
+  routes:
+  - path: /api
+  health_check:
+    http_path: /health
+  envs:
+  - key: DATABASE_URL
+    scope: RUN_TIME
+    type: SECRET
+    value: ${bulletdrop-db.DATABASE_URL}
+  - key: SECRET_KEY
+    scope: RUN_TIME
+    type: SECRET
+  - key: ENVIRONMENT
+    scope: RUN_TIME
+    value: production
+  - key: CORS_ORIGINS
+    scope: RUN_TIME
+    value: ${_self.PROTOCOL}://${_self.PUBLIC_URL}
+  - key: GOOGLE_CLIENT_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: GOOGLE_CLIENT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_CLIENT_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: DISCORD_CLIENT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: GITHUB_CLIENT_ID
+    scope: RUN_TIME
+    type: SECRET
+  - key: GITHUB_CLIENT_SECRET
+    scope: RUN_TIME
+    type: SECRET
+  - key: UPLOAD_MAX_SIZE
+    scope: RUN_TIME
+    value: "10485760"
+  - key: UPLOAD_ALLOWED_TYPES
+    scope: RUN_TIME
+    value: "image/jpeg,image/png,image/gif,image/webp"
+
+# Frontend Service
+- name: web
+  source_dir: /frontend
+  github:
+    repo: your-username/bulletdrop
+    branch: main
+    deploy_on_push: true
+  build_command: npm run build
+  run_command: serve -s dist -l $PORT
+  environment_slug: node-js
+  instance_count: 1
+  instance_size_slug: basic-xxs
+  routes:
+  - path: /
+  envs:
+  - key: VITE_API_URL
+    scope: BUILD_TIME
+    value: ${api.PUBLIC_URL}
+
+# Static file hosting (optional - for uploaded files)
+static_sites:
+- name: uploads
+  source_dir: /uploads
+  routes:
+  - path: /uploads
+
+# Optional: Worker service for background tasks
+# workers:
+# - name: worker
+#   source_dir: /backend
+#   run_command: python app/worker.py
+#   environment_slug: python
+#   instance_count: 1
+#   instance_size_slug: basic-xxs
