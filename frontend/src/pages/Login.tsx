@@ -19,7 +19,10 @@ export default function Login() {
 
   const handleOAuthLogin = (provider: string) => {
     const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-    window.location.href = `${apiUrl}/auth/${provider}`;
+    const origin = window.location.origin;
+    const url = new URL(`${apiUrl}/auth/${provider}`);
+    url.searchParams.set('redirect_origin', origin);
+    window.location.href = url.toString();
   };
 
   return (

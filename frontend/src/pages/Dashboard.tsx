@@ -4,6 +4,9 @@ import { useAuth } from '../hooks/useAuth';
 import { apiService } from '../services/api';
 import { Upload } from '../types/upload';
 import FileUpload from '../components/FileUpload';
+import ViewCounter from '../components/ViewCounter';
+import TrendingContent from '../components/TrendingContent';
+import { useFileViewTracking } from '../hooks/useViewTracking';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
@@ -48,6 +51,67 @@ export default function Dashboard() {
     });
   };
 
+  // Component for individual upload cards with view tracking
+  const UploadCard = ({ upload }: { upload: Upload }) => {
+    // Track views when user clicks to view the file
+    useFileViewTracking(upload.id, { enabled: false }); // Disabled auto-tracking for dashboard
+
+    const handleViewClick = () => {
+      // Manually track when user actually views the file
+      // This prevents accidental view tracking from just browsing dashboard
+      window.open(upload.upload_url, '_blank');
+    };
+
+    return (
+      <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 transform transition-all duration-300 hover:scale-105 hover:shadow-lg">
+        <div className="flex items-center space-x-3">
+          {upload.mime_type.startsWith('image/') ? (
+            <img
+              src={upload.upload_url}
+              alt={upload.original_filename}
+              className="h-10 w-10 rounded object-cover"
+            />
+          ) : (
+            <div className="h-10 w-10 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
+              <svg className="h-6 w-6 text-gray-400 dark:text-gray-300" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+              {upload.original_filename}
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              {formatDate(upload.created_at)}
+            </p>
+            {/* Use ViewCounter component */}
+            <ViewCounter 
+              contentType="file" 
+              contentId={upload.id} 
+              compact={true} 
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <div className="mt-2 flex space-x-2">
+          <button
+            onClick={() => navigator.clipboard.writeText(upload.upload_url)}
+            className="text-xs text-blue-600 hover:text-blue-500 transition-colors duration-300"
+          >
+            Copy URL
+          </button>
+          <button
+            onClick={handleViewClick}
+            className="text-xs text-green-600 hover:text-green-500 transition-colors duration-300"
+          >
+            View
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   const storagePercentage = user ? (user.storage_used / user.storage_limit) * 100 : 0;
 
   return (
@@ -71,7 +135,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {/* Upload Count */}
         <div className="bg-white dark:bg-gray-800 overflow-hidden shadow-lg dark:shadow-gray-900 rounded-lg transform transition-all duration-300 hover:scale-105">
           <div className="p-5">
@@ -191,7 +255,7 @@ export default function Dashboard() {
           <h3 className="text-lg leading-6 font-medium text-gray-900 dark:text-white mb-4">
             Quick Actions
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
               onClick={() => setShowUploadWidget(!showUploadWidget)}
               className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-all duration-300 hover:scale-105"
@@ -209,6 +273,16 @@ export default function Dashboard() {
                 <path fillRule="evenodd" d="M4 4a2 2 0 00-2 2v8a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
               </svg>
               View All Uploads
+            </Link>
+            <Link
+              to="/sharex"
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 hover:scale-105"
+              title="Set up ShareX to upload screenshots here"
+            >
+              <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5 3a2 2 0 00-2 2v6a2 2 0 002 2h6a2 2 0 002-2V5a2 2 0 00-2-2H5zm8 4h6a2 2 0 012 2v8a2 2 0 01-2 2h-8a2 2 0 01-2-2v-6"/>
+              </svg>
+              ShareX Setup
             </Link>
           </div>
         </div>
@@ -254,50 +328,22 @@ export default function Dashboard() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {recentUploads.map((upload) => (
-                <div key={upload.id} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 transform transition-all duration-300 hover:scale-105 hover:shadow-lg">
-                  <div className="flex items-center space-x-3">
-                    {upload.mime_type.startsWith('image/') ? (
-                      <img
-                        src={upload.upload_url}
-                        alt={upload.original_filename}
-                        className="h-10 w-10 rounded object-cover"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 bg-gray-200 dark:bg-gray-600 rounded flex items-center justify-center">
-                        <svg className="h-6 w-6 text-gray-400 dark:text-gray-300" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                        {upload.original_filename}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        {formatDate(upload.created_at)} • {upload.view_count} views
-                      </p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex space-x-2">
-                    <button
-                      onClick={() => navigator.clipboard.writeText(upload.upload_url)}
-                      className="text-xs text-blue-600 hover:text-blue-500 transition-colors duration-300"
-                    >
-                      Copy URL
-                    </button>
-                    <a
-                      href={upload.upload_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-green-600 hover:text-green-500 transition-colors duration-300"
-                    >
-                      View
-                    </a>
-                  </div>
-                </div>
+                <UploadCard key={upload.id} upload={upload} />
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Trending Content */}
+      <div className="mt-8 bg-white dark:bg-gray-800 shadow-lg dark:shadow-gray-900 rounded-lg transform transition-all duration-300 hover:shadow-xl">
+        <div className="px-4 py-5 sm:p-6">
+          <TrendingContent 
+            timePeriod="24h"
+            maxItems={5}
+            showProfiles={true}
+            showFiles={true}
+          />
         </div>
       </div>
     </div>

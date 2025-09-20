@@ -22,7 +22,7 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 from typing import Union, Optional
 from jose import JWTError, jwt
-from fastapi import HTTPException, status, Depends
+from fastapi import HTTPException, status, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.core.config import settings
@@ -176,6 +176,88 @@ def get_current_active_user(current_user: User = Depends(get_current_user)) -> U
     return current_user
 
 
+def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    db: Session = Depends(get_db)
+) -> Optional[User]:
+    """
+    FastAPI dependency to optionally get the current authenticated user from JWT token.
+    
+    Unlike get_current_user, this function returns None if no valid token is provided
+    instead of raising an exception.
+
+    Args:
+        credentials (Optional[HTTPAuthorizationCredentials]): The Bearer token from the Authorization header (optional)
+        db (Session): Database session dependency
+
+    Returns:
+        Optional[User]: The authenticated user object or None if not authenticated
+    """
+    if not credentials:
+        return None
+    
+    try:
+        payload = verify_token(credentials.credentials)
+        if payload is None:
+            return None
+
+        username: str = payload.get("sub")
+        if username is None:
+            return None
+
+        user = db.query(User).filter(User.username == username).first()
+        if user is None or not user.is_active:
+            return None
+
+        return user
+
+    except JWTError:
+        return None
+
+
+def get_current_user_with_api_key(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
+    db: Session = Depends(get_db)
+) -> User:
+    """
+    Auth dependency that accepts either a Bearer JWT or an X-API-Key header.
+
+    Priority: If X-API-Key is present and valid, authenticate via API key. Otherwise fall back to JWT.
+    """
+    # Try API Key first if provided
+    if x_api_key:
+        user = db.query(User).filter(User.api_key == x_api_key).first()
+        if user and user.is_active:
+            return user
+
+    # Fallback to JWT if provided
+    if credentials:
+        payload = verify_token(credentials.credentials)
+        if payload:
+            username: str = payload.get("sub")
+            if username:
+                user = db.query(User).filter(User.username == username).first()
+                if user and user.is_active:
+                    return user
+
+    # If neither works, raise
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials (token or API key)",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+def get_current_active_user_with_api_key(current_user: User = Depends(get_current_user_with_api_key)) -> User:
+    """
+    Ensure the current user (via API key or JWT) is active.
+    """
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
 def get_current_admin_user(current_user: User = Depends(get_current_active_user)) -> User:
     """
     FastAPI dependency to ensure the current user has admin privileges.
@@ -195,6 +277,10 @@ def get_current_admin_user(current_user: User = Depends(get_current_active_user)
             detail="Admin access required"
         )
     return current_user
+
+
+# Alias for consistency with other routes
+get_current_admin = get_current_admin_user
 
 
 def authenticate_user(db: Session, username: str, password: str) -> Union[User, bool]:

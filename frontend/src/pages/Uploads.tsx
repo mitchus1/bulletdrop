@@ -5,6 +5,7 @@ import { Upload } from '../types/upload';
 import { useToast } from '../contexts/ToastContext';
 import { SkeletonTable } from '../components/Skeleton';
 import FileUpload from '../components/FileUpload';
+import ViewCounter from '../components/ViewCounter';
 
 export default function Uploads() {
   const [uploads, setUploads] = useState<Upload[]>([]);
@@ -189,7 +190,11 @@ export default function Uploads() {
                           {formatFileSize(upload.file_size)}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 dark:text-gray-300">
-                          {upload.view_count}
+                          <ViewCounter 
+                            contentType="file" 
+                            contentId={upload.id} 
+                            compact={true} 
+                          />
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
                           {formatDate(upload.created_at)}

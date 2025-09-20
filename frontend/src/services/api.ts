@@ -292,6 +292,23 @@ class ApiService {
   async adminRequest<T>(endpoint: string, options?: RequestInit): Promise<T> {
     return this.request<T>(`/admin${endpoint}`, options);
   }
+
+  // API Key endpoints
+  async generateApiKey(): Promise<{ api_key: string }> {
+    return this.request<{ api_key: string }>(`/users/me/api-key`, {
+      method: 'POST',
+    });
+  }
+
+  async revokeApiKey(): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/users/me/api-key`, {
+      method: 'DELETE',
+    });
+  }
+
+  async getApiKeyStatus(): Promise<{ has_api_key: boolean }> {
+    return this.request<{ has_api_key: boolean }>(`/users/me/api-key`);
+  }
 }
 
 export const apiService = new ApiService();

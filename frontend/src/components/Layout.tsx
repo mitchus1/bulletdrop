@@ -16,6 +16,32 @@ export default function Layout({ children }: LayoutProps) {
     await logout()
   }
 
+  // Extract domain name without TLD from current hostname
+  const getDomainName = () => {
+    const hostname = window.location.hostname
+    
+    // Handle localhost and development
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('localhost')) {
+      return 'bulletdrop'
+    }
+    
+    // Split hostname and remove common TLDs
+    const parts = hostname.split('.')
+    if (parts.length >= 2) {
+      // Remove common TLDs (.com, .page, .me, .io, .org, .net, etc.)
+      const commonTlds = ['com', 'page', 'me', 'io', 'org', 'net', 'co', 'dev', 'app', 'tech', 'xyz', 'club']
+      const lastPart = parts[parts.length - 1].toLowerCase()
+      
+      if (commonTlds.includes(lastPart)) {
+        // Return the part before the TLD
+        return parts[parts.length - 2]
+      }
+    }
+    
+    // Fallback: return the first part or full hostname
+    return parts[0] || hostname
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
       <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-300">
@@ -26,7 +52,7 @@ export default function Layout({ children }: LayoutProps) {
                 to={isAuthenticated ? "/dashboard" : "/"}
                 className="text-xl font-bold text-gray-900 dark:text-white transition-colors duration-300 hover:text-blue-600 dark:hover:text-blue-400"
               >
-                BulletDrop
+                {getDomainName()}
               </Link>
             </div>
 

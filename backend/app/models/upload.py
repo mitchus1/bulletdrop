@@ -85,3 +85,4 @@ class Upload(Base):
     user = relationship("User", back_populates="uploads")
     domain = relationship("Domain", back_populates="uploads")
     analytics = relationship("UploadAnalytic", back_populates="upload", cascade="all, delete-orphan")
+    views = relationship("FileView", back_populates="upload", cascade="all, delete-orphan")

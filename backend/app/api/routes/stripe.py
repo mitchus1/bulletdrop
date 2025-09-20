@@ -28,8 +28,11 @@ async def create_checkout_session(
             current_user.stripe_customer_id = customer["id"]
             db.commit()
         
-        # Get base URL from request
-        base_url = f"{request.url.scheme}://{request.url.netloc}"
+        # Determine base URL (prefer frontend origin for multi-domain)
+        origin = request.headers.get("origin")
+        # Optionally allow explicit override via query param
+        redirect_origin = request.query_params.get("redirect_origin")
+        base_url = (redirect_origin or origin or settings.FRONTEND_URL or f"{request.url.scheme}://{request.url.netloc}").rstrip('/')
         
         # Create checkout session
         session = StripeService.create_checkout_session(
@@ -124,7 +127,9 @@ async def get_customer_portal(
         if not current_user.stripe_customer_id:
             raise HTTPException(status_code=400, detail="No customer account found")
         
-        base_url = f"{request.url.scheme}://{request.url.netloc}"
+        origin = request.headers.get("origin")
+        redirect_origin = request.query_params.get("redirect_origin")
+        base_url = (redirect_origin or origin or settings.FRONTEND_URL or f"{request.url.scheme}://{request.url.netloc}").rstrip('/')
         portal_url = StripeService.get_customer_portal_url(
             customer_id=current_user.stripe_customer_id,
             return_url=f"{base_url}/settings"

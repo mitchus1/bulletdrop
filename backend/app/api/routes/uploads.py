@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.core.database import get_db
-from app.core.security import get_current_active_user
+from app.core.security import get_current_active_user, get_current_active_user_with_api_key
 from app.models.user import User
 from app.models.upload import Upload
 from app.models.domain import Domain
@@ -68,7 +68,7 @@ async def upload_file(
 async def upload_file_sharex(
     request: Request,
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_active_user),
+    current_user: User = Depends(get_current_active_user_with_api_key),
     db: Session = Depends(get_db)
 ):
     """Upload endpoint compatible with ShareX and other screenshot tools"""

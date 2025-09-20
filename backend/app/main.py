@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import uvicorn
 from app.core.config import settings
-from app.api.routes import auth, users, uploads, domains, admin, stripe
+from app.api.routes import auth, users, uploads, domains, admin, stripe, analytics
 from app.core.database import engine
 from app.models import User, Upload, Domain
 from app.core.database import Base
@@ -41,7 +41,7 @@ app = FastAPI(
 # Configure CORS middleware for cross-origin requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_hosts_list,
+    allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -57,6 +57,7 @@ app.include_router(uploads.router, prefix="/api/uploads", tags=["uploads"])
 app.include_router(domains.router, prefix="/api/domains", tags=["domains"])
 app.include_router(admin.router, prefix="/admin", tags=["admin"])
 app.include_router(stripe.router, prefix="/api/stripe", tags=["stripe"])
+app.include_router(analytics.router, tags=["analytics"])
 
 
 @app.get("/", summary="Root endpoint", description="Returns API status message")

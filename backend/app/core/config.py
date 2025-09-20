@@ -12,8 +12,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
 
     # CORS
-    ALLOWED_HOSTS: str = "http://localhost:3000,http://localhost:5173"
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173"
+    # Include local dev and production domains pointing to the same frontend
+    ALLOWED_HOSTS: str = "http://localhost:3000,http://localhost:5173,https://mitchus.me,https://kitsune-chan.page"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,https://mitchus.me,https://kitsune-chan.page"
     
     # File Upload
     UPLOAD_DIR: str = "/mnt/bulletdrop-storage/uploads"
@@ -41,8 +42,8 @@ class Settings(BaseSettings):
     DISCORD_CLIENT_SECRET: str = ""
     DISCORD_REDIRECT_URI: str = ""
 
-    # OAuth Redirect URLs
-    FRONTEND_URL: str = "https://mitchus.me"
+    # OAuth Redirect URLs (leave empty to use dynamic origin at runtime)
+    FRONTEND_URL: str = ""
     
     # Base URL for file uploads (will be overridden by request host if not set)
     BASE_URL: str = ""
@@ -56,6 +57,16 @@ class Settings(BaseSettings):
     @property
     def allowed_hosts_list(self) -> List[str]:
         return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]
+
+    @property
+    def cors_origins_list(self) -> List[str]:
+        # Prefer CORS_ORIGINS if set; else fall back to ALLOWED_HOSTS
+        raw = self.CORS_ORIGINS or self.ALLOWED_HOSTS
+        items = [o.strip() for o in raw.split(",") if o.strip()]
+        # Ensure FRONTEND_URL is included
+        if self.FRONTEND_URL and self.FRONTEND_URL not in items:
+            items.append(self.FRONTEND_URL)
+        return items
     
     class Config:
         env_file = ".env"

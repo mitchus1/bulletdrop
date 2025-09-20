@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import { SkeletonProfile } from '../components/Skeleton'
+import ViewCounter from '../components/ViewCounter'
+import { useProfileViewTracking } from '../hooks/useViewTracking'
 
 interface UserProfile {
   id: number
@@ -73,6 +75,15 @@ export default function Profile() {
   const [loadingDomains, setLoadingDomains] = useState(false)
 
   const isOwnProfile = currentUser?.username === username
+
+  // Track profile views (only for profiles that aren't the current user's own profile)
+  useProfileViewTracking(
+    profile?.id, 
+    { 
+      enabled: !isOwnProfile && !!profile?.id,
+      delay: 3000 // 3 second delay for profile views
+    }
+  )
 
   // Helper function to get social media URLs
   const getSocialUrl = (platform: string, username: string) => {
@@ -314,6 +325,19 @@ export default function Profile() {
                       }}
                     ></div>
                   </div>
+                </div>
+
+                {/* Profile Views */}
+                <div>
+                  <div className="flex justify-between text-sm mb-2 text-white/90">
+                    <span>Profile views</span>
+                  </div>
+                  <ViewCounter 
+                    contentType="profile" 
+                    contentId={profile.id} 
+                    showDetails={true}
+                    className="text-white/80"
+                  />
                 </div>
                 
                 <div>

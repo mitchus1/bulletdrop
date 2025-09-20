@@ -15,6 +15,7 @@ import Premium from './pages/Premium'
 import PremiumSuccess from './pages/PremiumSuccess'
 import AdminDashboard from './pages/AdminDashboard'
 import OAuthCallback from './pages/OAuthCallback'
+import ShareX from './pages/ShareX'
 
 function App() {
   return (
@@ -50,6 +51,11 @@ function App() {
                 <Route path="/premium/success" element={
                   <ProtectedRoute>
                     <PremiumSuccess />
+                  </ProtectedRoute>
+                } />
+                <Route path="/sharex" element={
+                  <ProtectedRoute>
+                    <ShareX />
                   </ProtectedRoute>
                 } />
                 <Route path="/admin" element={

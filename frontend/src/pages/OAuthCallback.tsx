@@ -26,12 +26,13 @@ export default function OAuthCallback() {
 
       try {
         const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+        const redirectUri = `${window.location.origin}/auth/${provider}/callback`
         const response = await fetch(`${apiUrl}/auth/${provider}/callback`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ code }),
+          body: JSON.stringify({ code, redirect_uri: redirectUri }),
         })
 
         if (!response.ok) {

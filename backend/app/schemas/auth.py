@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 from datetime import datetime
 from typing import Optional
 
@@ -20,6 +21,8 @@ class TokenData(BaseModel):
 
 class OAuthCallback(BaseModel):
     code: str
+    # Optional redirect URI used during the provider auth step; required by some providers (e.g., Google/Discord)
+    redirect_uri: Optional[str] = None
 
 class UserResponse(BaseModel):
     id: int

@@ -147,20 +147,24 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
 
 # OAuth Routes
 @router.get("/auth/{provider}")
-async def oauth_login(provider: str):
+async def oauth_login(provider: str, request: Request, redirect_origin: str | None = None):
     """Initiate OAuth login with the specified provider."""
     if provider not in ['google', 'github', 'discord']:
         raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
 
-    # Use the redirect URI from environment variables
-    if provider == 'google':
-        redirect_uri = settings.GOOGLE_REDIRECT_URI
-    elif provider == 'github':
-        redirect_uri = settings.GITHUB_REDIRECT_URI
-    elif provider == 'discord':
-        redirect_uri = settings.DISCORD_REDIRECT_URI
-    else:
-        raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
+    # Determine origin (supports multi-domain)
+    origin = redirect_origin or str(request.headers.get('origin') or "") or str(request.base_url).rstrip('/')
+    # Fallback to configured frontend URL origin if needed
+    if not origin:
+        origin = settings.FRONTEND_URL.rstrip('/')
+
+    # Construct redirect_uri on the fly using the origin
+    # The frontend routes handle /auth/:provider/callback
+    redirect_uri = f"{origin}/auth/{provider}/callback"
+
+    # Preserve origin in state to recover on callback redirects (especially for GET-based flows)
+    import secrets as _secrets
+    state = _secrets.token_urlsafe(16) + "::" + origin
 
     # Build authorization URL manually for each provider
     if provider == 'google':
@@ -170,14 +174,16 @@ async def oauth_login(provider: str):
             f"redirect_uri={redirect_uri}&"
             f"scope=openid email profile&"
             f"response_type=code&"
-            f"access_type=offline"
+            f"access_type=offline&"
+            f"state={state}"
         )
     elif provider == 'github':
         auth_url = (
             f"https://github.com/login/oauth/authorize?"
             f"client_id={settings.GITHUB_CLIENT_ID}&"
             f"redirect_uri={redirect_uri}&"
-            f"scope=user:email"
+            f"scope=user:email&"
+            f"state={state}"
         )
     elif provider == 'discord':
         auth_url = (
@@ -185,25 +191,42 @@ async def oauth_login(provider: str):
             f"client_id={settings.DISCORD_CLIENT_ID}&"
             f"redirect_uri={redirect_uri}&"
             f"response_type=code&"
-            f"scope=identify email"
+            f"scope=identify email&"
+            f"state={state}"
         )
 
     return RedirectResponse(url=auth_url)
 
 @router.get("/auth/{provider}/callback")
-async def oauth_callback_get(provider: str, code: str, db: Session = Depends(get_db)):
+async def oauth_callback_get(provider: str, code: str, state: str | None = None, request: Request = None, db: Session = Depends(get_db)):
     """Handle OAuth callback from provider (GET request with query params)."""
+    # Determine target origin for building redirect_uri used in token exchange
+    from app.schemas.auth import OAuthCallback
+    target_origin = None
+    if state and '::' in state:
+        try:
+            target_origin = state.split('::', 1)[1]
+        except Exception:
+            target_origin = None
+    if not target_origin:
+        # Fallback to request base URL origin
+        # request.base_url like http://host:port/
+        if request is not None:
+            base = str(request.base_url).rstrip('/')
+            target_origin = base
+        else:
+            target_origin = settings.FRONTEND_URL.rstrip('/')
+
     try:
-        # Create a fake OAuthCallback object for the POST handler
-        from app.schemas.auth import OAuthCallback
-        callback_data = OAuthCallback(code=code)
+        redirect_uri = f"{target_origin}/auth/{provider}/callback"
+        callback_data = OAuthCallback(code=code, redirect_uri=redirect_uri)
         token_response = await oauth_callback(provider, callback_data, db)
-        # Redirect to frontend with token
-        frontend_url = f"{settings.FRONTEND_URL}/?token={token_response['access_token']}"
-        return RedirectResponse(url=frontend_url)
-    except Exception as e:
+        frontend_url = (target_origin or settings.FRONTEND_URL).rstrip('/')
+        redirect_url = f"{frontend_url}/?token={token_response['access_token']}"
+        return RedirectResponse(url=redirect_url)
+    except Exception:
         # Redirect to frontend with error
-        error_url = f"{settings.FRONTEND_URL}/login?error=oauth_failed"
+        error_url = f"{(target_origin or settings.FRONTEND_URL).rstrip('/')}/login?error=oauth_failed"
         return RedirectResponse(url=error_url)
 
 @router.post("/auth/{provider}/callback", response_model=Token)
@@ -217,15 +240,17 @@ async def oauth_callback(provider: str, callback_data: OAuthCallback, db: Sessio
         import httpx
 
         # Exchange code for access token
-        # Use the redirect URI from environment variables
-        if provider == 'google':
-            redirect_uri = settings.GOOGLE_REDIRECT_URI
-        elif provider == 'github':
-            redirect_uri = settings.GITHUB_REDIRECT_URI
-        elif provider == 'discord':
-            redirect_uri = settings.DISCORD_REDIRECT_URI
-        else:
-            raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
+        # Use provided dynamic redirect_uri when available, else fallback to env
+        redirect_uri = callback_data.redirect_uri
+        if not redirect_uri:
+            if provider == 'google':
+                redirect_uri = settings.GOOGLE_REDIRECT_URI
+            elif provider == 'github':
+                redirect_uri = settings.GITHUB_REDIRECT_URI
+            elif provider == 'discord':
+                redirect_uri = settings.DISCORD_REDIRECT_URI
+            else:
+                raise HTTPException(status_code=400, detail="Unsupported OAuth provider")
 
         if provider == 'google':
             token_url = "https://oauth2.googleapis.com/token"
@@ -242,6 +267,8 @@ async def oauth_callback(provider: str, callback_data: OAuthCallback, db: Sessio
                 "client_id": settings.GITHUB_CLIENT_ID,
                 "client_secret": settings.GITHUB_CLIENT_SECRET,
                 "code": code,
+                # GitHub supports redirect_uri optionally if it was used initially
+                **({"redirect_uri": redirect_uri} if redirect_uri else {}),
             }
         elif provider == 'discord':
             token_url = "https://discord.com/api/oauth2/token"

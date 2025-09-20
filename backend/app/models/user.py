@@ -123,6 +123,8 @@ class User(Base):
     uploads = relationship("Upload", back_populates="user", cascade="all, delete-orphan")
     user_domains = relationship("UserDomain", back_populates="user", cascade="all, delete-orphan")
     preferred_domain = relationship("Domain", foreign_keys=[preferred_domain_id])
+    profile_views_received = relationship("ProfileView", foreign_keys="ProfileView.profile_user_id", back_populates="profile_user", cascade="all, delete-orphan")
+    profile_views_made = relationship("ProfileView", foreign_keys="ProfileView.viewer_user_id", back_populates="viewer_user")
     
     def has_active_premium(self) -> bool:
         """Check if user has active premium subscription"""

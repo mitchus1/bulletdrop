@@ -150,37 +150,21 @@ async def seed_domains(db: Session = Depends(get_db)):
     """Seed initial domains (development only)"""
     default_domains = [
         {
-            "domain_name": "img.bulletdrop.com",
-            "display_name": "Image Hosting",
+            "domain_name": "kitsune-chan.page",
+            "display_name": "UwU Images",
             "description": "Primary image hosting domain",
             "is_available": True,
-            "is_premium": False,
-            "max_file_size": 10 * 1024 * 1024  # 10MB
+            "is_premium": True,
+            "max_file_size": 50 * 1024 * 1024  # 10MB
         },
         {
-            "domain_name": "shots.bulletdrop.com",
+            "domain_name": "mitchus.me",
             "display_name": "Screenshots",
             "description": "Screenshots and quick captures",
             "is_available": True,
             "is_premium": False,
             "max_file_size": 5 * 1024 * 1024  # 5MB
         },
-        {
-            "domain_name": "cdn.bulletdrop.com",
-            "display_name": "CDN",
-            "description": "Content delivery network",
-            "is_available": True,
-            "is_premium": True,
-            "max_file_size": 50 * 1024 * 1024  # 50MB
-        },
-        {
-            "domain_name": "media.bulletdrop.com",
-            "display_name": "Media Files",
-            "description": "Large media file hosting",
-            "is_available": True,
-            "is_premium": True,
-            "max_file_size": 100 * 1024 * 1024  # 100MB
-        }
     ]
 
     created_count = 0

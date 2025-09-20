@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security.utils import get_authorization_scheme_param
+import secrets
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_active_user, verify_password, get_password_hash
@@ -186,3 +188,40 @@ async def change_password(
         return {"message": "Password set successfully"}
     else:
         return {"message": "Password changed successfully"}
+
+
+@router.post("/me/api-key")
+async def generate_api_key(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a new API key for the current user. Replaces any existing key.
+    """
+    api_key = secrets.token_urlsafe(48)
+    current_user.api_key = api_key
+    db.commit()
+    return {"api_key": api_key}
+
+
+@router.delete("/me/api-key")
+async def revoke_api_key(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Revoke the current user's API key.
+    """
+    current_user.api_key = None
+    db.commit()
+    return {"message": "API key revoked"}
+
+
+@router.get("/me/api-key")
+async def get_api_key(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Retrieve whether the user has an API key. For security, only return presence flag unless explicitly requested.
+    """
+    return {"has_api_key": bool(current_user.api_key)}

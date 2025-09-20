@@ -56,7 +56,7 @@ const Premium: React.FC = () => {
     
     setProcessing(true);
     try {
-      const response = await authFetch('/api/stripe/create-checkout-session', {
+      const response = await authFetch(`/api/stripe/create-checkout-session?redirect_origin=${encodeURIComponent(window.location.origin)}`, {
         method: 'POST',
       });
       
@@ -126,7 +126,7 @@ const Premium: React.FC = () => {
   const handleManageBilling = async () => {
     setProcessing(true);
     try {
-      const response = await authFetch('/api/stripe/customer-portal');
+  const response = await authFetch(`/api/stripe/customer-portal?redirect_origin=${encodeURIComponent(window.location.origin)}`);
       
       if (response.ok) {
         const data = await response.json();

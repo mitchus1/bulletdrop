@@ -31,7 +31,10 @@ export default function Home() {
 
   const handleOAuthLogin = (provider: string) => {
     const backendUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-    window.location.href = `${backendUrl}/auth/${provider}`
+    const origin = window.location.origin
+    const url = new URL(`${backendUrl}/auth/${provider}`)
+    url.searchParams.set('redirect_origin', origin)
+    window.location.href = url.toString()
   }
 
   return (
@@ -82,6 +85,25 @@ export default function Home() {
               </svg>
               <span>Continue with Google</span>
             </button>
+          </div>
+
+
+
+          {/* ShareX Promo */}
+          <div className="mt-16 max-w-3xl mx-auto bg-white/10 backdrop-blur-md rounded-xl p-6 border border-white/20 text-left">
+            <div className="flex items-start gap-4">
+              <div className="text-4xl">📸</div>
+              <div>
+                <h3 className="text-2xl font-semibold text-white mb-2">Instant uploads with ShareX</h3>
+                <p className="text-blue-100 mb-4">Set up our one-click ShareX uploader to send screenshots straight to your custom domain. Lightning fast. Private by default. Delete links included.</p>
+                <a
+                  href="/sharex"
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-lg hover:shadow-xl"
+                >
+                  Set up ShareX →
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Features */}
