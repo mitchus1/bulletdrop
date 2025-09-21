@@ -15,3 +15,4 @@ authlib
 pytest
 pytest-asyncio
 redis
+stripe

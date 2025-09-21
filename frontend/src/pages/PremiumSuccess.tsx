@@ -1,19 +1,38 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const PremiumSuccess: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { success } = useToast();
+  const { token, refreshUser } = useAuth();
   const [loading, setLoading] = useState(true);
   const sessionId = searchParams.get('session_id');
 
   useEffect(() => {
-    if (sessionId) {
-      success('Payment successful! Welcome to BulletDrop Premium!');
-    }
-    setLoading(false);
-  }, [sessionId, success]);
+    const verify = async () => {
+      try {
+        if (sessionId) {
+          const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+          const res = await fetch(`${apiUrl}/api/stripe/checkout-success?session_id=${encodeURIComponent(sessionId)}`, {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : undefined
+          });
+          if (res.ok) {
+            success('Payment verified! Your premium has been activated.');
+            await refreshUser();
+          } else {
+            // Still show success, webhook may handle it
+            success('Payment successful! Premium will activate shortly.');
+            await refreshUser();
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+    verify();
+  }, [sessionId, success, token, refreshUser]);
 
   if (loading) {
     return (

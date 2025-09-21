@@ -25,6 +25,9 @@ export default function AdminUserManagement() {
   
   const [users, setUsers] = useState<AdminUser[]>([])
   const [loading, setLoading] = useState(false)
+  const [syncingId, setSyncingId] = useState<number | null>(null)
+  const [customerIdInput, setCustomerIdInput] = useState<string>('')
+  const [settingCustomerId, setSettingCustomerId] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterActive, setFilterActive] = useState<boolean | null>(null)
   const [filterPremium, setFilterPremium] = useState<boolean | null>(null)
@@ -88,6 +91,105 @@ export default function AdminUserManagement() {
       }
     } catch (err) {
       error('Failed to delete user')
+    }
+  }
+
+  const grantPremium = async (userId: number) => {
+    if (!token) return
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/admin/users/${userId}/grant-premium`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ lifetime: true })
+      })
+      if (!response.ok) throw new Error('Failed to grant premium')
+  await response.json()
+  success('Premium granted')
+      // Update local list
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_premium: true, premium_expires_at: null } : u))
+      // Update modal view
+      setSelectedUser(prev => prev && prev.id === userId ? { ...prev, is_premium: true, premium_expires_at: null } : prev)
+    } catch (e) {
+      error('Failed to grant premium')
+    }
+  }
+
+  const revokePremium = async (userId: number) => {
+    if (!token) return
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/admin/users/${userId}/revoke-premium`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!response.ok) throw new Error('Failed to revoke premium')
+      await response.json()
+      success('Premium revoked')
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_premium: false, premium_expires_at: null } : u))
+      setSelectedUser(prev => prev && prev.id === userId ? { ...prev, is_premium: false, premium_expires_at: null } : prev)
+    } catch (e) {
+      error('Failed to revoke premium')
+    }
+  }
+
+  const syncFromStripe = async (userId: number) => {
+    if (!token) return
+    try {
+      setSyncingId(userId)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/admin/users/${userId}/sync-stripe`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      })
+      if (!response.ok) {
+        const msg = await response.text()
+        throw new Error(msg || 'Failed to sync from Stripe')
+      }
+      const result = await response.json()
+      const synced = result.user
+      success('User synced from Stripe')
+      // Update list and modal
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, is_premium: synced.is_premium, premium_expires_at: synced.premium_expires_at } : u))
+      setSelectedUser(prev => prev && prev.id === userId ? { ...prev, is_premium: synced.is_premium, premium_expires_at: synced.premium_expires_at } : prev)
+    } catch (e) {
+      error('Failed to sync from Stripe')
+    } finally {
+      setSyncingId(null)
+    }
+  }
+
+  const setStripeCustomer = async (userId: number, customerId: string) => {
+    if (!token) return
+    try {
+      setSettingCustomerId(userId)
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+      const response = await fetch(`${apiUrl}/admin/users/${userId}/set-stripe-customer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ stripe_customer_id: customerId })
+      })
+      if (!response.ok) {
+        const msg = await response.text()
+        throw new Error(msg || 'Failed to set Stripe customer')
+      }
+      await response.json()
+      success('Stripe customer set')
+      setCustomerIdInput('')
+    } catch (e) {
+      error('Failed to set Stripe customer')
+    } finally {
+      setSettingCustomerId(null)
     }
   }
 
@@ -257,6 +359,21 @@ export default function AdminUserManagement() {
                       >
                         View
                       </button>
+                      {user.is_premium ? (
+                        <button
+                          onClick={() => revokePremium(user.id)}
+                          className="text-yellow-700 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                        >
+                          Revoke Premium
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => grantPremium(user.id)}
+                          className="text-green-700 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+                        >
+                          Grant Premium
+                        </button>
+                      )}
                       {!user.is_admin && (
                         <button
                           onClick={() => setDeleteConfirm(user.id)}
@@ -363,6 +480,49 @@ export default function AdminUserManagement() {
                   <strong>Premium Expires:</strong> {formatDate(selectedUser.premium_expires_at)}
                 </div>
               )}
+              <div className="col-span-2 mt-2">
+                <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Set Stripe Customer ID</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="cus_..."
+                    value={customerIdInput}
+                    onChange={(e) => setCustomerIdInput(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                  />
+                  <button
+                    onClick={() => customerIdInput && setStripeCustomer(selectedUser.id, customerIdInput)}
+                    disabled={!customerIdInput || settingCustomerId === selectedUser.id}
+                    className={`px-4 py-2 rounded-lg ${settingCustomerId === selectedUser.id ? 'bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'} text-white`}
+                  >
+                    {settingCustomerId === selectedUser.id ? 'Setting…' : 'Set Customer'}
+                  </button>
+                </div>
+              </div>
+              <div className="col-span-2 flex gap-3 mt-2">
+                <button
+                  onClick={() => syncFromStripe(selectedUser.id)}
+                  disabled={syncingId === selectedUser.id}
+                  className={`px-4 py-2 rounded-lg ${syncingId === selectedUser.id ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'} text-white`}
+                >
+                  {syncingId === selectedUser.id ? 'Syncing…' : 'Sync from Stripe'}
+                </button>
+                {selectedUser.is_premium ? (
+                  <button
+                    onClick={() => revokePremium(selectedUser.id)}
+                    className="px-4 py-2 rounded-lg bg-yellow-600 hover:bg-yellow-700 text-white"
+                  >
+                    Revoke Premium
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => grantPremium(selectedUser.id)}
+                    className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    Grant Premium
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

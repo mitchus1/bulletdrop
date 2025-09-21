@@ -36,6 +36,16 @@ class UserUpdateRequest(BaseModel):
     is_verified: Optional[bool] = None
     storage_limit: Optional[int] = None
 
+# Admin premium management
+class GrantPremiumRequest(BaseModel):
+    lifetime: bool = False
+    days: Optional[int] = None  # if provided, sets premium for N days
+    expires_at: Optional[datetime] = None  # explicit expiry timestamp
+
+class SetStripeCustomerRequest(BaseModel):
+    stripe_customer_id: str
+    force: bool = False  # if true, skip user_id metadata check
+
 # Domain management schemas
 class AdminDomainResponse(BaseModel):
     id: int

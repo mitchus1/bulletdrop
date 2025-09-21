@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import ReactPlayer from 'react-player'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -28,14 +29,7 @@ interface UserProfile {
   premium_expires_at?: string
 }
 
-interface Domain {
-  id: number
-  domain_name: string
-  display_name: string
-  description?: string
-  is_available: boolean
-  is_premium: boolean
-}
+// (removed Domain interface; editing and domain selection moved to Settings)
 
 // Matrix rain animation component
 const MatrixBackground = () => (
@@ -45,8 +39,8 @@ const MatrixBackground = () => (
         key={i}
         className="absolute text-green-400 font-mono text-xs animate-pulse select-none"
         style={{
-          left: `${(i * 7) % 100}%`,
-          top: '-20px',
+          insetInlineStart: `${(i * 7) % 100}%`,
+          insetBlockStart: '-20px',
           animation: `matrixRain ${3 + Math.random() * 2}s linear infinite`,
           animationDelay: `${Math.random() * 2}s`
         }}
@@ -63,18 +57,100 @@ const MatrixBackground = () => (
 
 export default function Profile() {
   const { username } = useParams<{ username: string }>()
-  const { user: currentUser, token } = useAuth()
+  const { user: currentUser } = useAuth()
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [formData, setFormData] = useState<Partial<UserProfile>>({})
-  const [domains, setDomains] = useState<Domain[]>([])
-  const [loadingDomains, setLoadingDomains] = useState(false)
+  const [videoBgEnabled, setVideoBgEnabled] = useState(true)
+  const [videoReady, setVideoReady] = useState(false)
+  const [muted, setMuted] = useState(true)
+  
+
+  const isUrl = (val?: string) => !!val && /^https?:\/\//i.test(val)
+
+  const normalizeMediaUrl = (val?: string) => {
+    if (!val) return ''
+    if (!isUrl(val)) return ''
+    try {
+      const u = new URL(val)
+      const isYouTube = u.hostname.includes('youtube.com') || u.hostname.includes('youtu.be')
+      if (!isYouTube) return val
+
+  // Normalize host to privacy-enhanced domain when embedding (still works for watch URLs)
+  const host = 'www.youtube-nocookie.com'
+
+      // If v param exists, prefer watch?v=...
+      const v = u.searchParams.get('v')
+      if (v) {
+        // Preserve time-related params if present
+        const t = u.searchParams.get('t')
+        const start = u.searchParams.get('start')
+        const timeQuery = t ? `&t=${encodeURIComponent(t)}` : start ? `&start=${encodeURIComponent(start)}` : ''
+        return `https://${host}/watch?v=${v}${timeQuery}`
+      }
+
+      // shorts format: /shorts/ID
+      const shortsMatch = u.pathname.match(/^\/shorts\/([A-Za-z0-9_-]+)/)
+      if (shortsMatch) {
+        const id = shortsMatch[1]
+        return `https://${host}/watch?v=${id}`
+      }
+
+      // embed format: /embed/ID
+      const embedMatch = u.pathname.match(/^\/embed\/([A-Za-z0-9_-]+)/)
+      if (embedMatch) {
+        const id = embedMatch[1]
+        return `https://${host}/watch?v=${id}`
+      }
+
+      // live format: /live/ID
+      const liveMatch = u.pathname.match(/^\/live\/([A-Za-z0-9_-]+)/)
+      if (liveMatch) {
+        const id = liveMatch[1]
+        return `https://${host}/watch?v=${id}`
+      }
+
+      // youtu.be short links
+      if (u.hostname === 'youtu.be') {
+        // pathname like /VIDEOID
+        const id = u.pathname.replace(/^\//, '')
+        if (id) {
+          const t = u.searchParams.get('t')
+          const timeQuery = t ? `&t=${encodeURIComponent(t)}` : ''
+          return `https://${host}/watch?v=${id}${timeQuery}`
+        }
+      }
+
+      // m.youtube.com or music.youtube.com or other subdomains
+      if (u.hostname.endsWith('.youtube.com')) {
+        // If already a watch URL without v param extraction above, return as-is
+        // but normalize to www subdomain
+        if (u.pathname === '/watch') {
+          const v2 = u.searchParams.get('v')
+          if (v2) {
+            const t = u.searchParams.get('t')
+            const start = u.searchParams.get('start')
+            const timeQuery = t ? `&t=${encodeURIComponent(t)}` : start ? `&start=${encodeURIComponent(start)}` : ''
+            return `https://${host}/watch?v=${v2}${timeQuery}`
+          }
+        }
+      }
+
+      // Fallback: return original
+      return val
+    } catch {
+      return val
+    }
+  }
 
   const isOwnProfile = currentUser?.username === username
+
+  // Determine if background image is a YouTube URL
+  const rawBg = profile?.background_image || ''
+  const normalizedBg = normalizeMediaUrl(rawBg)
+  const isYouTubeBg = isUrl(rawBg) && /youtube\.com|youtu\.be/.test(rawBg)
 
   // Track profile views (only for profiles that aren't the current user's own profile)
   useProfileViewTracking(
@@ -99,11 +175,8 @@ export default function Profile() {
   useEffect(() => {
     if (username) {
       fetchProfile()
-      if (isOwnProfile) {
-        fetchDomains()
-      }
     }
-  }, [username, isOwnProfile])
+  }, [username])
 
   const fetchProfile = async () => {
     try {
@@ -121,7 +194,6 @@ export default function Profile() {
 
       const profileData = await response.json()
       setProfile(profileData)
-      setFormData(profileData)
     } catch (error) {
       setError('Failed to load profile')
     } finally {
@@ -129,71 +201,6 @@ export default function Profile() {
     }
   }
 
-  const fetchDomains = async () => {
-    try {
-      setLoadingDomains(true)
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-      const response = await fetch(`${apiUrl}/domains`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      })
-      if (response.ok) {
-        const domainsData = await response.json()
-        setDomains(domainsData)
-      }
-    } catch (error) {
-      console.error('Failed to fetch domains:', error)
-    } finally {
-      setLoadingDomains(false)
-    }
-  }
-
-  const handleEdit = () => {
-    setEditing(true)
-    setFormData(profile || {})
-  }
-
-  const handleCancel = () => {
-    setEditing(false)
-    setFormData(profile || {})
-  }
-
-  const handleSave = async () => {
-    if (!token) return
-
-    try {
-      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/users/me`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`,
-        },
-        body: JSON.stringify(formData),
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update profile')
-      }
-
-      const updatedProfile = await response.json()
-      setProfile(updatedProfile)
-      setEditing(false)
-    } catch (error) {
-      setError('Failed to update profile')
-    }
-  }
-
-  const handleInputChange = (field: keyof UserProfile, value: string | number) => {
-    if (field === 'preferred_domain_id') {
-      // Handle preferred_domain_id as a number
-      const numValue = value === '' ? undefined : Number(value)
-      setFormData(prev => ({ ...prev, [field]: numValue }))
-    } else {
-      setFormData(prev => ({ ...prev, [field]: value }))
-    }
-  }
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 Bytes'
@@ -235,34 +242,59 @@ export default function Profile() {
   return (
     <div 
       className="min-h-screen relative overflow-hidden"
-      style={{
-        backgroundImage: profile.background_image ? `url(${profile.background_image})` : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        backgroundColor: profile.background_color || '#667eea',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundAttachment: 'fixed'
-      }}
+      style={
+        isYouTubeBg && videoBgEnabled && videoReady
+          ? {
+              backgroundColor: profile.background_color || '#000',
+            }
+          : {
+              backgroundImage: profile.background_image && !isYouTubeBg
+                ? `url(${profile.background_image})`
+                : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              backgroundColor: profile.background_color || '#667eea',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundAttachment: 'fixed',
+            }
+      }
     >
-      {/* Matrix animation overlay */}
-      <MatrixBackground />
+      {/* Background YouTube video when background_image is a YouTube URL */}
+      {isYouTubeBg && videoBgEnabled && (
+        <div className="absolute inset-0 z-0">
+          <ReactPlayer
+            url={normalizedBg}
+            width="100%"
+            height="100%"
+            playing
+            loop
+            muted={muted}
+            playsinline
+            controls={false}
+            volume={0.6}
+            config={{
+              youtube: {
+                playerVars: { autoplay: 1, controls: 0, modestbranding: 1, rel: 0, showinfo: 0, mute: 1, enablejsapi: 1, origin: window.location.origin },
+                embedOptions: { host: 'https://www.youtube-nocookie.com' }
+              },
+            }}
+            onReady={() => setVideoReady(true)}
+            onError={() => setVideoBgEnabled(false)}
+            style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+          />
+        </div>
+      )}
+    {/* Matrix animation overlay (above video) */}
+    <MatrixBackground />
       
-      {/* Dark overlay for better readability */}
-      <div className="absolute inset-0 bg-black/20"></div>
+    {/* Dark overlay for better readability, above video */}
+    <div className="absolute inset-0 bg-black/20 z-10 pointer-events-none"></div>
       
       {/* Hover navbar */}
-      <div className="fixed top-0 left-0 right-0 z-50 transform -translate-y-full hover:translate-y-0 transition-transform duration-300 group">
+  <div className="fixed top-0 left-0 right-0 z-50 transform -translate-y-full hover:translate-y-0 transition-transform duration-300 group">
         <div className="bg-black/80 backdrop-blur-md text-white p-4">
           <div className="max-w-6xl mx-auto flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <h1 className="text-xl font-bold">{profile.username}'s Profile</h1>
-              {isOwnProfile && (
-                <button
-                  onClick={handleEdit}
-                  className="bg-white/20 hover:bg-white/30 px-3 py-1 rounded-lg text-sm transition-colors"
-                >
-                  {editing ? 'Editing...' : 'Edit Profile'}
-                </button>
-              )}
             </div>
             <div className="flex items-center space-x-4">
               {/* Theme toggle */}
@@ -280,8 +312,19 @@ export default function Profile() {
       {/* Navbar hover indicator */}
       <div className="fixed top-0 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-white/30 hover:bg-white/60 rounded-b-full z-40 transition-all duration-300 hover:w-16 hover:h-2"></div>
 
+      {/* Background audio control */}
+      {isYouTubeBg && videoBgEnabled && videoReady && (
+        <button
+          onClick={() => setMuted((m) => !m)}
+          className="fixed bottom-4 right-4 z-50 px-3 py-2 rounded-lg bg-black/50 text-white border border-white/20 backdrop-blur-md hover:bg-black/60 transition"
+          aria-label={muted ? 'Unmute background video' : 'Mute background video'}
+        >
+          {muted ? '🔈 Unmute' : '🔊 Mute'}
+        </button>
+      )}
+
       {/* Main content with glassmorphism cards */}
-      <div className="relative z-10 min-h-screen flex items-center justify-center p-4">
+  <div className="relative z-20 min-h-screen flex items-center justify-center p-4">
         <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
           
           {/* Profile Card */}
@@ -321,7 +364,7 @@ export default function Profile() {
                     <div 
                       className="bg-gradient-to-r from-blue-400 to-purple-400 h-2 rounded-full transition-all duration-500"
                       style={{ 
-                        width: `${Math.min((profile.upload_count / 100) * 100, 100)}%`
+                        inlineSize: `${Math.min((profile.upload_count / 100) * 100, 100)}%`
                       }}
                     ></div>
                   </div>
@@ -350,7 +393,7 @@ export default function Profile() {
                   <div className="w-full bg-white/20 rounded-full h-2">
                     <div
                       className="bg-gradient-to-r from-green-400 to-blue-400 h-2 rounded-full transition-all duration-500"
-                      style={{ width: `${Math.min(storagePercentage, 100)}%` }}
+                      style={{ inlineSize: `${Math.min(storagePercentage, 100)}%` }}
                     ></div>
                   </div>
                   <div className="text-xs text-white/70 mt-1">
@@ -383,15 +426,7 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Favorite Song */}
-              {profile.favorite_song && (
-                <div className="bg-white/10 rounded-xl p-4 border border-white/20">
-                  <h3 className="text-white font-semibold mb-2 flex items-center">
-                    🎵 <span className="ml-2">Now Playing</span>
-                  </h3>
-                  <p className="text-white/90 text-sm">{profile.favorite_song}</p>
-                </div>
-              )}
+              {/* Removed inline music player; background YouTube video is handled globally */}
             </div>
           </div>
 
@@ -401,18 +436,9 @@ export default function Profile() {
             {/* Bio Card */}
             <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
               <h2 className="text-2xl font-bold text-white mb-4">About</h2>
-              {editing ? (
-                <textarea
-                  value={formData.bio || ''}
-                  onChange={(e) => handleInputChange('bio', e.target.value)}
-                  placeholder="Tell people about yourself..."
-                  className="w-full h-32 p-4 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-xl focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
-                />
-              ) : (
-                <p className="text-white/90 text-lg leading-relaxed">
-                  {profile.bio || 'No bio provided yet.'}
-                </p>
-              )}
+              <p className="text-white/90 text-lg leading-relaxed">
+                {profile.bio || 'No bio provided yet.'}
+              </p>
             </div>
 
             {/* Social Links Card */}
@@ -432,136 +458,32 @@ export default function Profile() {
                         <span>{name}</span>
                       </span>
                     </label>
-                    {editing ? (
-                      <input
-                        type="text"
-                        value={formData[field as keyof UserProfile] as string || ''}
-                        onChange={(e) => handleInputChange(field as keyof UserProfile, e.target.value)}
-                        placeholder={`Your ${name} username`}
-                        className="w-full p-3 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
-                      />
-                    ) : (
-                      <div>
-                        {profile[field as keyof UserProfile] as string ? (
-                          <a
-                            href={getSocialUrl(field.replace('_username', ''), profile[field as keyof UserProfile] as string)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className={`block w-full p-4 bg-gradient-to-r ${color} rounded-xl text-white hover:scale-105 transform transition-all duration-200 shadow-lg hover:shadow-xl`}
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">@{profile[field as keyof UserProfile] as string}</span>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                              </svg>
-                            </div>
-                          </a>
-                        ) : (
-                          <div className="w-full p-4 bg-white/5 rounded-xl text-white/60 text-center border border-white/10">
-                            Not connected
+                    <div>
+                      {profile[field as keyof UserProfile] as string ? (
+                        <a
+                          href={getSocialUrl(field.replace('_username', ''), profile[field as keyof UserProfile] as string)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={`block w-full p-4 bg-gradient-to-r ${color} rounded-xl text-white hover:scale-105 transform transition-all duration-200 shadow-lg hover:shadow-xl`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span className="font-medium">@{profile[field as keyof UserProfile] as string}</span>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
                           </div>
-                        )}
-                      </div>
-                    )}
+                        </a>
+                      ) : (
+                        <div className="w-full p-4 bg-white/5 rounded-xl text-white/60 text-center border border-white/10">
+                          Not connected
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* Customization Card - Only when editing */}
-            {editing && (
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
-                <h2 className="text-2xl font-bold text-white mb-6">Customize</h2>
-                <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-white/90 mb-2">
-                      Background Color
-                    </label>
-                    <input
-                      type="color"
-                      value={formData.background_color || '#667eea'}
-                      onChange={(e) => handleInputChange('background_color', e.target.value)}
-                      className="w-full h-12 bg-white/10 border border-white/20 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white/90 mb-2">
-                      Background Image URL
-                    </label>
-                    <input
-                      type="url"
-                      value={formData.background_image || ''}
-                      onChange={(e) => handleInputChange('background_image', e.target.value)}
-                      placeholder="https://example.com/image.jpg"
-                      className="w-full p-3 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white/90 mb-2">
-                      Favorite Song
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.favorite_song || ''}
-                      onChange={(e) => handleInputChange('favorite_song', e.target.value)}
-                      placeholder="Artist - Song Title"
-                      className="w-full p-3 bg-white/10 border border-white/20 text-white placeholder-white/60 rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-white/90 mb-2">
-                      Preferred Domain
-                    </label>
-                    {loadingDomains ? (
-                      <div className="w-full p-3 bg-white/10 border border-white/20 rounded-lg text-white/60">
-                        Loading domains...
-                      </div>
-                    ) : (
-                      <select
-                        value={formData.preferred_domain_id || ''}
-                        onChange={(e) => handleInputChange('preferred_domain_id', e.target.value)}
-                        className="w-full p-3 bg-white/10 border border-white/20 text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-white/30 backdrop-blur-sm"
-                      >
-                        <option value="">Select a domain...</option>
-                        {domains.map((domain) => (
-                          <option 
-                            key={domain.id} 
-                            value={domain.id} 
-                            className="bg-gray-800 text-white"
-                            disabled={domain.is_premium && !profile?.is_premium}
-                          >
-                            {domain.display_name || domain.domain_name}
-                            {domain.is_premium ? ' 👑 Premium' : ''}
-                            {domain.is_premium && !profile?.is_premium ? ' (Premium Required)' : ''}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <p className="text-sm text-white/60 mt-1">
-                      This domain will be used for your ShareX uploads and file URLs
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Edit Buttons */}
-            {editing && (
-              <div className="flex justify-end space-x-4">
-                <button
-                  onClick={handleCancel}
-                  className="px-6 py-3 bg-white/10 hover:bg-white/20 text-white rounded-xl border border-white/20 transition-colors backdrop-blur-sm"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSave}
-                  className="px-6 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white rounded-xl transition-colors shadow-lg hover:shadow-xl"
-                >
-                  Save Changes
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>

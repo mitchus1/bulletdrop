@@ -9,9 +9,12 @@ from app.core.security import get_current_admin_user
 from app.models.user import User
 from app.models.domain import Domain, UserDomain
 from app.models.upload import Upload
+from app.services.stripe_service import StripeService
 from app.schemas.admin import (
     AdminUserResponse,
     UserUpdateRequest,
+    GrantPremiumRequest,
+    SetStripeCustomerRequest,
     AdminDomainResponse,
     DomainCreateRequest,
     DomainUpdateRequest,
@@ -32,7 +35,8 @@ async def get_all_users(
     limit: int = Query(100, ge=1, le=1000),
     search: Optional[str] = Query(None, description="Search by username or email"),
     is_active: Optional[bool] = Query(None, description="Filter by active status"),
-    is_admin: Optional[bool] = Query(None, description="Filter by admin status")
+    is_admin: Optional[bool] = Query(None, description="Filter by admin status"),
+    is_premium: Optional[bool] = Query(None, description="Filter by premium status")
 ):
     """Get all users with optional filtering"""
     query = db.query(User)
@@ -48,6 +52,9 @@ async def get_all_users(
     
     if is_admin is not None:
         query = query.filter(User.is_admin == is_admin)
+
+    if is_premium is not None:
+        query = query.filter(User.is_premium == is_premium)
     
     users = query.offset(skip).limit(limit).all()
     
@@ -169,6 +176,104 @@ async def delete_user(
             "uploads_deleted": upload_count
         }
     }
+
+# Premium management
+@router.post("/users/{user_id}/grant-premium")
+async def grant_premium(
+    user_id: int,
+    payload: GrantPremiumRequest,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Grant premium to a user. Supports lifetime, N days, or explicit expiry."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Determine expiry
+    expires_at = None
+    if payload.lifetime:
+        expires_at = None
+    elif payload.expires_at:
+        expires_at = payload.expires_at
+    elif payload.days and payload.days > 0:
+        expires_at = datetime.utcnow() + timedelta(days=payload.days)
+
+    user.is_premium = True
+    user.premium_expires_at = expires_at
+    db.commit()
+    db.refresh(user)
+    return {"message": "Premium granted", "user": AdminUserResponse(**user.__dict__, oauth_providers=[])}
+
+@router.post("/users/{user_id}/revoke-premium")
+async def revoke_premium(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Revoke premium from a user and clear Stripe subscription linkage."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    user.is_premium = False
+    user.premium_expires_at = None
+    # Do not touch customer id; clear subscription id to avoid stale linkage
+    user.stripe_subscription_id = None
+    db.commit()
+    db.refresh(user)
+    return {"message": "Premium revoked", "user": AdminUserResponse(**user.__dict__, oauth_providers=[])}
+
+@router.post("/users/{user_id}/sync-stripe")
+async def sync_user_from_stripe(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Sync user's premium from Stripe by finding an active/trialing subscription and updating fields."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    if not user.stripe_customer_id:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="User has no Stripe customer id to sync")
+
+    sub = StripeService.find_active_subscription_for_customer(user.stripe_customer_id)
+    if not sub:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active or trialing subscription found for this customer")
+
+    # Update linkage and premium flags
+    user.stripe_subscription_id = sub.get("id")
+    StripeService.update_user_premium_status(db, user, sub)
+    return {"message": "User synced from Stripe", "subscription_status": sub.get("status"), "user": AdminUserResponse(**user.__dict__, oauth_providers=[])}
+
+@router.post("/users/{user_id}/set-stripe-customer")
+async def set_user_stripe_customer(
+    user_id: int,
+    payload: SetStripeCustomerRequest,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin_user)
+):
+    """Set user's Stripe customer ID after validating it belongs to that user via metadata.user_id unless force=true."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    customer = StripeService.get_customer(payload.stripe_customer_id)
+    if not customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stripe customer not found")
+
+    # Validate metadata.user_id if not forced
+    if not payload.force:
+        meta = (customer.get("metadata") or {})
+        meta_uid = meta.get("user_id")
+        if str(user.id) != str(meta_uid):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Stripe customer metadata user_id mismatch; use force to override")
+
+    user.stripe_customer_id = payload.stripe_customer_id
+    db.commit()
+    db.refresh(user)
+    return {"message": "Stripe customer set", "user": AdminUserResponse(**user.__dict__, oauth_providers=[])}
 
 @router.get("/statistics")
 async def get_admin_statistics(

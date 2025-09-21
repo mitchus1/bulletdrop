@@ -249,7 +249,7 @@ const Premium: React.FC = () => {
               <div className="text-center mb-6">
                 <h3 className="text-2xl font-bold">Premium</h3>
                 <div className="mt-2">
-                  <span className="text-4xl font-bold">$1</span>
+                  <span className="text-4xl font-bold">2.99€</span>
                   <span className="text-purple-200">/month</span>
                 </div>
               </div>
