@@ -46,6 +46,11 @@ class RedisService:
         self.redis_client = None
         self._connected = False
         self._connect()
+    
+    @property
+    def client(self):
+        """Get the Redis client instance."""
+        return self.redis_client
 
     def _connect(self):
         """Establish connection to Redis/Valkey."""

@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     CACHE_TTL_ANALYTICS: int = 600  # 10 minutes
     CACHE_TTL_VIEW_COUNTS: int = 86400  # 24 hours
     
+    # Rate Limiting Settings
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_AUTH_PER_MINUTE: int = 5
+    RATE_LIMIT_AUTH_PER_HOUR: int = 20
+    RATE_LIMIT_API_PER_MINUTE: int = 60
+    RATE_LIMIT_API_PER_HOUR: int = 1000
+    RATE_LIMIT_UPLOAD_PER_MINUTE: int = 10
+    RATE_LIMIT_UPLOAD_PER_HOUR: int = 100
+    RATE_LIMIT_BLOCK_DURATION: int = 300  # 5 minutes
+    
     @property
     def allowed_hosts_list(self) -> List[str]:
         return [host.strip() for host in self.ALLOWED_HOSTS.split(",")]

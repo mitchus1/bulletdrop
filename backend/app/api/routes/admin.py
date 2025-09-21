@@ -14,6 +14,7 @@ from app.models.upload import Upload
 from app.services.stripe_service import StripeService
 from app.services.redis_service import redis_service
 from app.services.admin_monitoring import AdminMonitoringService
+from app.api.routes import rate_limits
 
 logger = logging.getLogger(__name__)
 from app.schemas.admin import (
@@ -31,6 +32,9 @@ from app.schemas.admin import (
 )
 
 router = APIRouter()
+
+# Include rate limiting admin routes
+router.include_router(rate_limits.router, prefix="/rate-limits", tags=["rate-limits"])
 
 # User Management Endpoints
 @router.get("/users", response_model=List[AdminUserResponse])

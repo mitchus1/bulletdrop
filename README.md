@@ -7,6 +7,8 @@ Modern file sharing and profile platform with advanced customization, OAuth inte
 ### 🔐 Authentication & Security
 - **Multi-OAuth Support**: GitHub, Google, Discord integration
 - **Secure Sessions**: JWT-based authentication with refresh tokens
+- **Rate Limiting**: Advanced rate limiting to prevent brute force attacks
+- **IP Blocking**: Automatic blocking of suspicious IPs
 - **Admin Panel**: Comprehensive user and content management
 - **Password Management**: Secure password handling with bcrypt
 
@@ -125,6 +127,16 @@ DISCORD_REDIRECT_URI=http://localhost:3000/auth/discord/callback
 # Optional: Redis for caching/sessions
 REDIS_URL=redis://localhost:6379
 
+# Rate Limiting (requires Redis)
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_AUTH_PER_MINUTE=5
+RATE_LIMIT_AUTH_PER_HOUR=20
+RATE_LIMIT_API_PER_MINUTE=60
+RATE_LIMIT_API_PER_HOUR=1000
+RATE_LIMIT_UPLOAD_PER_MINUTE=10
+RATE_LIMIT_UPLOAD_PER_HOUR=100
+RATE_LIMIT_BLOCK_DURATION=300
+
 # Optional: Custom domain support
 DOMAIN_VALIDATION_ENABLED=false
 CUSTOM_DOMAIN_SUPPORT=false
@@ -176,8 +188,31 @@ VITE_DISCORD_CLIENT_ID=your_discord_client_id
 - **Discord Integration**: OAuth login and profile management
 - **Custom Domains**: Support for custom domain routing
 - **Screenshot Tools**: ShareX integration and custom tools
-- **Admin Panel**: User and content management
+- **Rate Limiting**: Comprehensive rate limiting with Redis-based storage
+- **Security**: IP blocking, brute force protection, and attack prevention
+- **Admin Panel**: User and content management with rate limit monitoring
 - **API**: RESTful API for integrations
+
+## 🛡️ Security Features
+
+### Rate Limiting
+BulletDrop includes comprehensive rate limiting to protect against various attacks:
+
+- **Authentication Endpoints**: 5 requests/minute, 20 requests/hour
+- **API Endpoints**: 60 requests/minute, 1000 requests/hour  
+- **Upload Endpoints**: 10 requests/minute, 100 requests/hour
+- **Automatic IP Blocking**: IPs exceeding auth limits are blocked for 5 minutes
+- **Admin Controls**: View blocked IPs, manually block/unblock addresses
+- **Redis-based**: Distributed rate limiting using sliding window algorithm
+
+Rate limiting can be configured via environment variables and disabled if needed.
+
+### Admin Rate Limit Management
+- `/admin/rate-limits/blocked-ips` - View currently blocked IP addresses
+- `/admin/rate-limits/block-ip` - Manually block an IP address
+- `/admin/rate-limits/unblock-ip/{ip}` - Unblock an IP address
+- `/admin/rate-limits/stats` - View rate limiting statistics
+- `/admin/rate-limits/clear-all` - Clear all rate limiting data (emergency use)
 
 ## 🔗 API Endpoints
 

@@ -29,6 +29,7 @@ from app.core.database import Base
 from app.services.analytics_service import AnalyticsService
 from app.services.image_effects_service import ImageEffectsService
 from app.schemas.analytics import ViewCreate
+from app.middleware.rate_limit import RateLimitMiddleware
 from sqlalchemy.orm import Session
 
 # Create database tables on startup
@@ -51,6 +52,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add rate limiting middleware (before route handlers)
+app.add_middleware(RateLimitMiddleware)
 
 # Note: File serving is handled by the custom /uploads/{category}/{filename} endpoint
 # This enables view tracking while preserving Discord embeds

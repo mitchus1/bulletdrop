@@ -240,3 +240,7 @@ backend/migrations/versions/d5bed757fb5b_remove_file_hash_unique_constraint.py
 backend/migrations/versions/e0ba0815ce33_add_preferred_domain_id_to_users.py
 frontend/node_modules/.vite/deps/_metadata.json
 backend/app/api/routes/__pycache__/*
+backend/app/core/config.py
+backend/app/services/__pycache__/*
+backend/alembic.ini
+                                          
