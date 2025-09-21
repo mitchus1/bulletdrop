@@ -21,6 +21,7 @@ class UserUpdateRequest(BaseModel):
     background_color: Optional[str] = None
     favorite_song: Optional[str] = None
     preferred_domain_id: Optional[int] = None
+    default_image_effect: Optional[str] = None  # 'rgb' or None
 
 class AccountUpdateRequest(BaseModel):
     username: Optional[str] = None
@@ -48,8 +49,23 @@ async def update_current_user(
     db: Session = Depends(get_db)
 ):
     """Update current user profile."""
+    # Enforce premium/admin requirement for default_image_effect
+    update_data = user_update.dict(exclude_unset=True)
+    if 'default_image_effect' in update_data:
+        effect = update_data['default_image_effect']
+        # Normalize empty strings to None
+        if effect == '':
+            effect = None
+        # Only allow 'rgb' or None
+        if effect not in (None, 'rgb'):
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image effect")
+        # Only premium or admin can set a non-null effect
+        if effect is not None and not (current_user.is_admin or current_user.has_active_premium()):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Image effects are premium-only")
+        update_data['default_image_effect'] = effect
+
     # Update only the fields that were provided
-    for field, value in user_update.dict(exclude_unset=True).items():
+    for field, value in update_data.items():
         setattr(current_user, field, value)
 
     db.commit()

@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.upload import Upload
 from app.models.domain import Domain
+from app.services.image_effects_service import ImageEffectsService
 
 class UploadService:
     def __init__(self):
@@ -236,6 +237,32 @@ class UploadService:
 
         # Save file
         file_path = await self.save_file(file, unique_filename, category)
+
+        # Apply default image effect for premium/admin users on image uploads
+        if category == 'images' and user.default_image_effect in ("rgb",):
+            # Only apply if user is admin or has active premium
+            if user.is_admin or user.has_active_premium():
+                try:
+                    # Generate processed image bytes
+                    original_abs_path = self.upload_dir / file_path
+                    processed_bytes = await ImageEffectsService.apply_effect(str(original_abs_path), user.default_image_effect)
+                    if processed_bytes:
+                        # Save processed image as PNG with same base name
+                        base = Path(unique_filename).stem
+                        processed_filename = f"{base}.png"
+                        processed_rel_path = Path('images') / processed_filename
+                        processed_abs_path = self.upload_dir / processed_rel_path
+                        with open(processed_abs_path, 'wb') as out:
+                            out.write(processed_bytes)
+
+                        # Replace file_path and unique_filename to reference processed PNG
+                        file_path = str(processed_rel_path)
+                        unique_filename = processed_filename
+                        # Update file_info size to processed size for accurate accounting
+                        file_info["file_size"] = len(processed_bytes)
+                except Exception:
+                    # Fail silently; keep original if processing fails
+                    pass
 
         # Create database record
         upload = await self.create_upload_record(

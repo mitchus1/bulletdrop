@@ -24,6 +24,7 @@ export interface User {
   is_verified: boolean;
   is_premium?: boolean;
   premium_expires_at?: string;
+  default_image_effect?: string | null;
   created_at: string;
   last_login?: string;
 }

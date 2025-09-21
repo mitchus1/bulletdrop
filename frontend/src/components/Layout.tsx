@@ -1,7 +1,8 @@
-import { ReactNode, useState } from 'react'
+import { ReactNode, useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { getCurrentDomainName } from '../utils/domain'
 
 interface LayoutProps {
   children: ReactNode
@@ -11,258 +12,288 @@ export default function Layout({ children }: LayoutProps) {
   const { user, logout, isAuthenticated } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [navbarVisible, setNavbarVisible] = useState(true)
+  const location = useLocation()
 
   const handleLogout = async () => {
     await logout()
   }
 
-  // Extract domain name without TLD from current hostname
-  const getDomainName = () => {
-    const hostname = window.location.hostname
-    
-    // Handle localhost and development
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.includes('localhost')) {
-      return 'bulletdrop'
+  // Check if current route is a profile page
+  const isProfilePage = location.pathname.startsWith('/profile/')
+
+  // Hide navbar by default on profile pages and control body scroll
+  useEffect(() => {
+    if (isProfilePage) {
+      setNavbarVisible(false)
+    } else {
+      setNavbarVisible(true)
     }
-    
-    // Split hostname and remove common TLDs
-    const parts = hostname.split('.')
-    if (parts.length >= 2) {
-      // Remove common TLDs (.com, .page, .me, .io, .org, .net, etc.)
-      const commonTlds = ['com', 'page', 'me', 'io', 'org', 'net', 'co', 'dev', 'app', 'tech', 'xyz', 'club']
-      const lastPart = parts[parts.length - 1].toLowerCase()
-      
-      if (commonTlds.includes(lastPart)) {
-        // Return the part before the TLD
-        return parts[parts.length - 2]
-      }
+  }, [isProfilePage])
+
+  // Separate effect to control body overflow based on navbar visibility
+  useEffect(() => {
+    if (isProfilePage) {
+      document.body.style.overflow = navbarVisible ? '' : 'hidden'
+    } else {
+      document.body.style.overflow = ''
     }
-    
-    // Fallback: return the first part or full hostname
-    return parts[0] || hostname
-  }
+  }, [isProfilePage, navbarVisible])
+
+  // Get current domain name without TLD
+  const domainName = getCurrentDomainName()
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-300">
-      <nav className="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700 transition-colors duration-300">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <Link
-                to={isAuthenticated ? "/dashboard" : "/"}
-                className="text-xl font-bold text-gray-900 dark:text-white transition-colors duration-300 hover:text-blue-600 dark:hover:text-blue-400"
-              >
-                {getDomainName()}
-              </Link>
-            </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-black transition-colors duration-300">
+      {/* Floating Toggle Button for Profile Pages */}
+      {isProfilePage && (
+        <button
+          onClick={() => setNavbarVisible(!navbarVisible)}
+          className={`fixed left-4 z-[100] p-3 rounded-full bg-black/20 dark:bg-white/20 backdrop-blur-sm hover:bg-black/30 dark:hover:bg-white/30 transition-all duration-300 group ${
+            navbarVisible ? 'top-20' : 'top-4'
+          }`}
+          title={navbarVisible ? 'Hide Navigation' : 'Show Navigation'}
+        >
+          <svg 
+            className={`w-6 h-6 text-white transition-transform duration-300 ${navbarVisible ? 'rotate-180' : ''}`} 
+            fill="none" 
+            stroke="currentColor" 
+            viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+      )}
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-4">
+      {/* Navigation Bar - Completely hidden on profile pages when toggled off */}
+      {(!isProfilePage || navbarVisible) && (
+        <nav className="bg-white dark:bg-black shadow-sm border-b border-gray-200 dark:border-gray-700 transition-all duration-300">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="flex justify-between h-16">
+              <div className="flex items-center">
+                <Link
+                  to={isAuthenticated ? "/dashboard" : "/"}
+                  className="text-xl font-bold text-gray-900 dark:text-white transition-colors duration-300 hover:text-blue-600 dark:hover:text-blue-400"
+                >
+                  {domainName}
+                </Link>
+              </div>
+
+              {/* Desktop Navigation */}
+              <div className="hidden md:flex items-center space-x-4">
+                {isAuthenticated ? (
+                  <>
+                    <Link to="/dashboard" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                      Dashboard
+                    </Link>
+                    <Link to="/uploads" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                      Uploads
+                    </Link>
+                    <Link to={`/profile/${user?.username}`} className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                      Profile
+                    </Link>
+                    <Link to="/settings" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                      Settings
+                    </Link>
+                    <Link to="/premium" className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors duration-300 px-3 py-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/20 font-medium">
+                      ✨ Premium
+                    </Link>
+
+                    {/* Enhanced Admin Status - Only show for admin users */}
+                    {user?.is_admin && (
+                      <Link
+                        to="/admin"
+                        className="relative group flex items-center space-x-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-indigo-500 hover:from-purple-700 hover:to-indigo-700 dark:hover:from-purple-600 dark:hover:to-indigo-600 text-white font-medium transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
+                        title="Admin Dashboard"
+                      >
+                        {/* Animated Crown Icon */}
+                        <svg
+                          className="w-5 h-5 text-yellow-300 group-hover:text-yellow-200 transition-all duration-300 animate-pulse"
+                          fill="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path d="M5 16L3 7l3.5 1L12 4l5.5 4L21 7l-2 9H5zm7-2.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
+                        </svg>
+
+                        {/* Admin Text with Gradient */}
+                        <span className="bg-gradient-to-r from-yellow-200 to-yellow-100 bg-clip-text text-transparent group-hover:from-yellow-100 group-hover:to-white transition-all duration-300">
+                          Admin
+                        </span>
+
+                        {/* Background Glow */}
+                        <div className="absolute -inset-1 bg-gradient-to-r from-purple-400 to-indigo-400 rounded-lg opacity-30 group-hover:opacity-50 transition-opacity duration-300 blur-sm"></div>
+
+                        {/* Floating Sparkles */}
+                        <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-300 rounded-full animate-ping opacity-75"></div>
+                        <div className="absolute -bottom-1 -left-1 w-1.5 h-1.5 bg-purple-300 rounded-full animate-bounce delay-300 opacity-60"></div>
+                      </Link>
+                    )}
+
+                    {/* Theme Toggle Button */}
+                    <button
+                      onClick={toggleTheme}
+                      className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300 group"
+                      title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                    >
+                      {theme === 'light' ? (
+                        <svg className="w-5 h-5 text-gray-700 dark:text-gray-300 group-hover:text-yellow-500 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-5 h-5 text-gray-700 dark:text-gray-300 group-hover:text-yellow-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                        </svg>
+                      )}
+                    </button>
+
+                    <button
+                      onClick={handleLogout}
+                      className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link to="/login" className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors duration-300 shadow-md hover:shadow-lg">
+                      Sign In
+                    </Link>
+                  </>
+                )}
+              </div>
+
+              {/* Mobile menu button */}
+              <div className="md:hidden flex items-center space-x-2">
+                {/* Theme toggle for mobile */}
+                <button
+                  onClick={toggleTheme}
+                  className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300"
+                  title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
+                >
+                  {theme === 'light' ? (
+                    <svg className="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  )}
+                </button>
+
+                {/* Hamburger menu button */}
+                <button
+                  onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                  className="p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300"
+                  aria-label="Toggle menu"
+                >
+                  <svg
+                    className={`w-6 h-6 transform transition-transform duration-300 ${mobileMenuOpen ? 'rotate-90' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    {mobileMenuOpen ? (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    ) : (
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                    )}
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Mobile Navigation Menu */}
+          <div
+            className={`md:hidden transition-all duration-300 ease-in-out ${
+              mobileMenuOpen
+                ? 'max-h-96 opacity-100 visible'
+                : 'max-h-0 opacity-0 invisible'
+            } overflow-hidden bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700`}
+          >
+            <div className="px-4 pt-2 pb-3 space-y-1">
               {isAuthenticated ? (
                 <>
-                  <Link to="/dashboard" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <Link
+                    to="/dashboard"
+                    className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     Dashboard
                   </Link>
-                  <Link to="/uploads" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <Link
+                    to="/uploads"
+                    className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     Uploads
                   </Link>
-                  <Link to={`/profile/${user?.username}`} className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <Link
+                    to={`/profile/${user?.username}`}
+                    className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     Profile
                   </Link>
-                  <Link to="/settings" className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700">
+                  <Link
+                    to="/settings"
+                    className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     Settings
                   </Link>
-                  <Link to="/premium" className="text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 transition-colors duration-300 px-3 py-2 rounded-md hover:bg-purple-50 dark:hover:bg-purple-900/20 font-medium">
+                  <Link
+                    to="/premium"
+                    className="block px-3 py-2 rounded-md text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors duration-300 font-medium"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     ✨ Premium
                   </Link>
 
-                  {/* Enhanced Admin Status - Only show for admin users */}
                   {user?.is_admin && (
                     <Link
                       to="/admin"
-                      className="relative group flex items-center space-x-2 px-3 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-indigo-500 hover:from-purple-700 hover:to-indigo-700 dark:hover:from-purple-600 dark:hover:to-indigo-600 text-white font-medium transition-all duration-300 transform hover:scale-105 hover:shadow-lg"
-                      title="Admin Dashboard"
+                      className="block px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-indigo-500 text-white font-medium transition-all duration-300"
+                      onClick={() => setMobileMenuOpen(false)}
                     >
-                      {/* Animated Crown Icon */}
-                      <svg
-                        className="w-5 h-5 text-yellow-300 group-hover:text-yellow-200 transition-all duration-300 animate-pulse"
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path d="M5 16L3 7l3.5 1L12 4l5.5 4L21 7l-2 9H5zm7-2.5a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>
-                      </svg>
-
-                      {/* Admin Text with Gradient */}
-                      <span className="bg-gradient-to-r from-yellow-200 to-yellow-100 bg-clip-text text-transparent group-hover:from-yellow-100 group-hover:to-white transition-all duration-300">
-                        Admin
-                      </span>
-
-                      {/* Subtle Animation Ring */}
-                      <div className="absolute -inset-1 bg-gradient-to-r from-purple-400 to-indigo-400 rounded-lg opacity-30 group-hover:opacity-50 transition-opacity duration-300 blur-sm"></div>
-
-                      {/* Floating Sparkles */}
-                      <div className="absolute -top-1 -right-1 w-2 h-2 bg-yellow-300 rounded-full animate-ping opacity-75"></div>
-                      <div className="absolute -bottom-1 -left-1 w-1.5 h-1.5 bg-purple-300 rounded-full animate-bounce delay-300 opacity-60"></div>
+                      👑 Admin Dashboard
                     </Link>
                   )}
 
-                  {/* Theme Toggle Button */}
                   <button
-                    onClick={toggleTheme}
-                    className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300 group"
-                    title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-                  >
-                    {theme === 'light' ? (
-                      <svg className="w-5 h-5 text-gray-700 dark:text-gray-300 group-hover:text-yellow-500 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                      </svg>
-                    ) : (
-                      <svg className="w-5 h-5 text-gray-700 dark:text-gray-300 group-hover:text-yellow-400 transition-colors duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={handleLogout}
-                    className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors duration-300 px-3 py-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+                    onClick={() => {
+                      handleLogout();
+                      setMobileMenuOpen(false);
+                    }}
+                    className="block w-full text-left px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
                   >
                     Logout
                   </button>
                 </>
               ) : (
                 <>
-                  <Link to="/login" className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white px-4 py-2 rounded-md transition-colors duration-300 shadow-md hover:shadow-lg">
+                  <Link
+                    to="/login"
+                    className="block px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium transition-colors duration-300"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
                     Sign In
                   </Link>
                 </>
               )}
             </div>
-
-            {/* Mobile menu button */}
-            <div className="md:hidden flex items-center space-x-2">
-              {/* Theme toggle for mobile */}
-              <button
-                onClick={toggleTheme}
-                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-all duration-300"
-                title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-              >
-                {theme === 'light' ? (
-                  <svg className="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 text-gray-700 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z" />
-                  </svg>
-                )}
-              </button>
-
-              {/* Hamburger menu button */}
-              <button
-                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="p-2 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-300"
-                aria-label="Toggle menu"
-              >
-                <svg
-                  className={`w-6 h-6 transform transition-transform duration-300 ${mobileMenuOpen ? 'rotate-90' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  {mobileMenuOpen ? (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  ) : (
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  )}
-                </svg>
-              </button>
-            </div>
           </div>
-        </div>
+        </nav>
+      )}
 
-        {/* Mobile Navigation Menu */}
-        <div
-          className={`md:hidden transition-all duration-300 ease-in-out ${
-            mobileMenuOpen
-              ? 'max-h-96 opacity-100 visible'
-              : 'max-h-0 opacity-0 invisible'
-          } overflow-hidden bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700`}
-        >
-          <div className="px-4 pt-2 pb-3 space-y-1">
-            {isAuthenticated ? (
-              <>
-                <Link
-                  to="/dashboard"
-                  className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Dashboard
-                </Link>
-                <Link
-                  to="/uploads"
-                  className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Uploads
-                </Link>
-                <Link
-                  to={`/profile/${user?.username}`}
-                  className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Profile
-                </Link>
-                <Link
-                  to="/settings"
-                  className="block px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Settings
-                </Link>
-                <Link
-                  to="/premium"
-                  className="block px-3 py-2 rounded-md text-purple-600 dark:text-purple-400 hover:text-purple-700 dark:hover:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors duration-300 font-medium"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  ✨ Premium
-                </Link>
-
-                {user?.is_admin && (
-                  <Link
-                    to="/admin"
-                    className="block px-3 py-2 rounded-md bg-gradient-to-r from-purple-600 to-indigo-600 dark:from-purple-500 dark:to-indigo-500 text-white font-medium transition-all duration-300"
-                    onClick={() => setMobileMenuOpen(false)}
-                  >
-                    👑 Admin Dashboard
-                  </Link>
-                )}
-
-                <button
-                  onClick={() => {
-                    handleLogout();
-                    setMobileMenuOpen(false);
-                  }}
-                  className="block w-full text-left px-3 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors duration-300"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
-              <>
-                <Link
-                  to="/login"
-                  className="block px-3 py-2 rounded-md bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 text-white font-medium transition-colors duration-300"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  Sign In
-                </Link>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
-      <main className="transition-colors duration-300">{children}</main>
+      <main className={`transition-all duration-300 ${
+        isProfilePage && !navbarVisible 
+          ? 'min-h-screen' 
+          : ''
+      }`}>
+        {children}
+      </main>
     </div>
   )
 }

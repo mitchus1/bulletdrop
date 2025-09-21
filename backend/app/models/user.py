@@ -113,6 +113,10 @@ class User(Base):
     
     # API access
     api_key = Column(String(255), unique=True, nullable=True)
+
+    # Preferences
+    # Default image effect applied to new image uploads (None, 'rgb')
+    default_image_effect = Column(String(20), nullable=True, default=None)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)

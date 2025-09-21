@@ -4,7 +4,31 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Mitchus - Discord Profiles & Image Hosting</title>
+    <title>Loading…</title>
+    <script>
+      (function () {
+        try {
+          var hostname = window.location.hostname;
+          var name;
+          if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname.indexOf('localhost') !== -1) {
+            name = 'bulletdrop';
+          } else {
+            var parts = hostname.split('.');
+            if (parts.length >= 2) {
+              var commonTlds = ['com','page','me','io','org','net','co','dev','app','tech','xyz','club'];
+              var last = parts[parts.length - 1].toLowerCase();
+              name = commonTlds.indexOf(last) !== -1 ? parts[parts.length - 2] : (parts[0] || hostname);
+            } else {
+              name = parts[0] || hostname;
+            }
+          }
+          document.title = name + ' - Discord Profiles & Image Hosting';
+        } catch (e) {
+          // Fallback title
+          document.title = 'Discord Profiles & Image Hosting';
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import ReactPlayer from 'react-player'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useTheme } from '../contexts/ThemeContext'
 import { SkeletonProfile } from '../components/Skeleton'
 import ViewCounter from '../components/ViewCounter'
 import { useProfileViewTracking } from '../hooks/useViewTracking'
@@ -58,7 +57,6 @@ const MatrixBackground = () => (
 export default function Profile() {
   const { username } = useParams<{ username: string }>()
   const { user: currentUser } = useAuth()
-  const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -288,29 +286,6 @@ export default function Profile() {
       
     {/* Dark overlay for better readability, above video */}
     <div className="absolute inset-0 bg-black/20 z-10 pointer-events-none"></div>
-      
-      {/* Hover navbar */}
-  <div className="fixed top-0 left-0 right-0 z-50 transform -translate-y-full hover:translate-y-0 transition-transform duration-300 group">
-        <div className="bg-black/80 backdrop-blur-md text-white p-4">
-          <div className="max-w-6xl mx-auto flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-bold">{profile.username}'s Profile</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              {/* Theme toggle */}
-              <button
-                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                className="bg-white/20 hover:bg-white/30 p-2 rounded-lg transition-colors"
-              >
-                {theme === 'light' ? '🌙' : '☀️'}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Navbar hover indicator */}
-      <div className="fixed top-0 left-1/2 transform -translate-x-1/2 w-12 h-1 bg-white/30 hover:bg-white/60 rounded-b-full z-40 transition-all duration-300 hover:w-16 hover:h-2"></div>
 
       {/* Background audio control */}
       {isYouTubeBg && videoBgEnabled && videoReady && (
@@ -329,7 +304,7 @@ export default function Profile() {
           
           {/* Profile Card */}
           <div className="lg:col-span-1 order-1">
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+            <div className="bg-white/20 backdrop-blur-md rounded-2xl p-6 border border-white/30 shadow-2xl">
               {/* Avatar */}
               <div className="text-center mb-6">
                 {profile.avatar_url ? (
@@ -434,7 +409,7 @@ export default function Profile() {
           <div className="lg:col-span-2 order-2 space-y-6">
             
             {/* Bio Card */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+            <div className="bg-white/20 backdrop-blur-md rounded-2xl p-6 border border-white/30 shadow-2xl">
               <h2 className="text-2xl font-bold text-white mb-4">About</h2>
               <p className="text-white/90 text-lg leading-relaxed">
                 {profile.bio || 'No bio provided yet.'}
@@ -442,7 +417,7 @@ export default function Profile() {
             </div>
 
             {/* Social Links Card */}
-            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20 shadow-2xl">
+            <div className="bg-white/20 backdrop-blur-md rounded-2xl p-6 border border-white/30 shadow-2xl">
               <h2 className="text-2xl font-bold text-white mb-6">Connect</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[

@@ -50,6 +50,7 @@ class UserResponse(BaseModel):
     is_verified: bool
     is_premium: bool = False
     premium_expires_at: Optional[datetime] = None
+    default_image_effect: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime] = None
 

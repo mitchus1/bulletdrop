@@ -305,6 +305,16 @@ def authenticate_user(db: Session, username: str, password: str) -> Union[User, 
     user = db.query(User).filter(User.username == username).first()
     if not user:
         return False
-    if not verify_password(password, user.hashed_password):
+
+    # If no stored hash (empty string or None), treat as no password set
+    if not user.hashed_password:
         return False
+
+    try:
+        if not verify_password(password, user.hashed_password):
+            return False
+    except Exception:
+        # If hash is invalid/corrupted, fail authentication gracefully
+        return False
+
     return user

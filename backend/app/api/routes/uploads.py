@@ -13,20 +13,36 @@ from app.services.upload_service import upload_service
 router = APIRouter()
 
 async def sync_user_counts(user: User, db: Session):
-    """Automatically sync user upload counts to ensure accuracy"""
+    """Automatically sync user upload counts to ensure accuracy with caching"""
     from sqlalchemy import func
-    
-    # Get actual counts from uploads table
-    result = db.query(
-        func.count(Upload.id).label('upload_count'),
-        func.coalesce(func.sum(Upload.file_size), 0).label('storage_used')
-    ).filter(Upload.user_id == user.id).first()
-    
-    # Only update if counts are different (avoid unnecessary DB writes)
-    if user.upload_count != result.upload_count or user.storage_used != result.storage_used:
-        user.upload_count = result.upload_count
-        user.storage_used = result.storage_used
-        db.commit()
+    from app.services.redis_service import redis_service
+
+    # Try cache first
+    cached_counts = redis_service.get_cached_user_counts(user.id)
+
+    if cached_counts:
+        # Use cached counts if available
+        user.upload_count = cached_counts["upload_count"]
+        user.storage_used = cached_counts["storage_used"]
+    else:
+        # Cache miss - get actual counts from uploads table
+        result = db.query(
+            func.count(Upload.id).label('upload_count'),
+            func.coalesce(func.sum(Upload.file_size), 0).label('storage_used')
+        ).filter(Upload.user_id == user.id).first()
+
+        # Only update if counts are different (avoid unnecessary DB writes)
+        if user.upload_count != result.upload_count or user.storage_used != result.storage_used:
+            user.upload_count = result.upload_count
+            user.storage_used = result.storage_used
+            db.commit()
+
+        # Cache the updated counts
+        redis_service.cache_user_counts(
+            user.id,
+            user.upload_count,
+            user.storage_used
+        )
 
 @router.post("/", response_model=UploadResponse)
 async def upload_file(
@@ -73,6 +89,8 @@ async def upload_file_sharex(
 ):
     """Upload endpoint compatible with ShareX and other screenshot tools"""
     try:
+        
+
         # Use user's preferred domain if set and accessible
         domain_id = None
         if current_user.preferred_domain_id:

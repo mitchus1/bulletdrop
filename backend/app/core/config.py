@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""
     STRIPE_PRICE_ID: str = ""  # Monthly subscription price ID
+
+    # Valkey/Redis Settings
+    REDIS_URL: str = "redis://localhost:6379"
+    CACHE_TTL_USER_PROFILE: int = 300  # 5 minutes
+    CACHE_TTL_FILE_METADATA: int = 3600  # 1 hour
+    CACHE_TTL_ANALYTICS: int = 600  # 10 minutes
+    CACHE_TTL_VIEW_COUNTS: int = 86400  # 24 hours
     
     @property
     def allowed_hosts_list(self) -> List[str]:

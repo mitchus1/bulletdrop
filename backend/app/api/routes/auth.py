@@ -108,24 +108,39 @@ async def login_json(user_login: UserLogin, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserResponse)
 async def read_users_me(current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)):
-    """Get current user information."""
-    # Auto-sync user counts to ensure accuracy
+    """Get current user information with caching."""
     from sqlalchemy import func
     from app.models.upload import Upload
-    
-    # Get actual counts from uploads table
-    result = db.query(
-        func.count(Upload.id).label('upload_count'),
-        func.coalesce(func.sum(Upload.file_size), 0).label('storage_used')
-    ).filter(Upload.user_id == current_user.id).first()
-    
-    # Only update if counts are different (avoid unnecessary DB writes)
-    if current_user.upload_count != result.upload_count or current_user.storage_used != result.storage_used:
-        current_user.upload_count = result.upload_count
-        current_user.storage_used = result.storage_used
-        db.commit()
-        db.refresh(current_user)
-    
+    from app.services.redis_service import redis_service
+
+    # Try to get cached user counts first
+    cached_counts = redis_service.get_cached_user_counts(current_user.id)
+
+    if cached_counts:
+        # Use cached counts if available and recent (less than 5 minutes old)
+        current_user.upload_count = cached_counts["upload_count"]
+        current_user.storage_used = cached_counts["storage_used"]
+    else:
+        # Cache miss - get actual counts from uploads table
+        result = db.query(
+            func.count(Upload.id).label('upload_count'),
+            func.coalesce(func.sum(Upload.file_size), 0).label('storage_used')
+        ).filter(Upload.user_id == current_user.id).first()
+
+        # Update user if counts are different (avoid unnecessary DB writes)
+        if current_user.upload_count != result.upload_count or current_user.storage_used != result.storage_used:
+            current_user.upload_count = result.upload_count
+            current_user.storage_used = result.storage_used
+            db.commit()
+            db.refresh(current_user)
+
+        # Cache the counts for future requests
+        redis_service.cache_user_counts(
+            current_user.id,
+            current_user.upload_count,
+            current_user.storage_used
+        )
+
     return current_user
 
 @router.post("/logout")
@@ -197,8 +212,39 @@ async def oauth_login(provider: str, request: Request, redirect_origin: str | No
 
     return RedirectResponse(url=auth_url)
 
+"""
+Backward-compatibility OAuth callback aliases
+
+Some OAuth provider configurations may still be pointing to
+"/auth/oauth/{provider}/callback" from a previous version. To avoid
+"oauth_failed" errors due to redirect URI mismatches, we provide
+aliases that forward to the current callback handlers.
+"""
+
+# Alias: GET /auth/oauth/{provider}/callback -> reuse GET handler
+@router.get("/auth/oauth/{provider}/callback")
+async def oauth_callback_get_alias(
+    provider: str,
+    code: str,
+    request: Request,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+):
+    # Delegate to the primary GET callback handler
+    return await oauth_callback_get(provider, code, state, request, db)
+
+# Alias: POST /auth/oauth/{provider}/callback -> reuse POST handler
+@router.post("/auth/oauth/{provider}/callback", response_model=Token)
+async def oauth_callback_post_alias(
+    provider: str,
+    callback_data: OAuthCallback,
+    db: Session = Depends(get_db),
+):
+    # Delegate to the primary POST callback handler
+    return await oauth_callback(provider, callback_data, db)
+
 @router.get("/auth/{provider}/callback")
-async def oauth_callback_get(provider: str, code: str, state: str | None = None, request: Request = None, db: Session = Depends(get_db)):
+async def oauth_callback_get(provider: str, code: str, request: Request, state: str | None = None, db: Session = Depends(get_db)):
     """Handle OAuth callback from provider (GET request with query params)."""
     # Determine target origin for building redirect_uri used in token exchange
     from app.schemas.auth import OAuthCallback
@@ -211,11 +257,8 @@ async def oauth_callback_get(provider: str, code: str, state: str | None = None,
     if not target_origin:
         # Fallback to request base URL origin
         # request.base_url like http://host:port/
-        if request is not None:
-            base = str(request.base_url).rstrip('/')
-            target_origin = base
-        else:
-            target_origin = settings.FRONTEND_URL.rstrip('/')
+        base = str(request.base_url).rstrip('/')
+        target_origin = base or settings.FRONTEND_URL.rstrip('/')
 
     try:
         redirect_uri = f"{target_origin}/auth/{provider}/callback"

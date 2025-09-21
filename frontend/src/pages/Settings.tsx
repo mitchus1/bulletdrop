@@ -22,6 +22,7 @@ interface ProfileData {
   background_color?: string
   favorite_song?: string
   preferred_domain_id?: number
+  default_image_effect?: string | null
 }
 
 interface AccountData {
@@ -75,7 +76,8 @@ export default function Settings() {
         background_image: user.background_image || '',
         background_color: user.background_color || '',
         favorite_song: user.favorite_song || '',
-        preferred_domain_id: user.preferred_domain_id
+        preferred_domain_id: user.preferred_domain_id,
+        default_image_effect: (user as any).default_image_effect || null
       })
       setAccountData({
         email: user.email,
@@ -258,6 +260,7 @@ export default function Settings() {
     { id: 'account', label: 'Account', icon: '👤' },
     { id: 'profile', label: 'Profile', icon: '✏️' },
     { id: 'appearance', label: 'Appearance', icon: '🎨' },
+    ...(user?.is_premium || user?.is_admin ? [{ id: 'effects', label: 'Image Effects', icon: '✨' }] : []),
     { id: 'security', label: 'Security', icon: '🔒' },
   ]
 
@@ -545,6 +548,34 @@ export default function Settings() {
                     className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
                   >
                     {loading ? 'Updating...' : 'Update Appearance'}
+                  </button>
+                </div>
+              )}
+
+              {/* Image Effects Tab (Premium/Admin only) */}
+              {activeTab === 'effects' && (user?.is_premium || user?.is_admin) && (
+                <div className="space-y-6">
+                  <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Image Effects</h2>
+                  <p className="text-gray-600 dark:text-gray-300 mb-4">Choose default effects applied to your image uploads. Available to Premium and Admin users.</p>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Default Effect</label>
+                    <select
+                      value={profileData.default_image_effect ?? ''}
+                      onChange={(e) => setProfileData(prev => ({ ...prev, default_image_effect: e.target.value || null }))}
+                      className="w-full max-w-sm px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-700 dark:text-white"
+                    >
+                      <option value="">None</option>
+                      <option value="rgb">RGB Border</option>
+                    </select>
+                  </div>
+
+                  <button
+                    onClick={updateProfile}
+                    disabled={loading}
+                    className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors duration-200"
+                  >
+                    {loading ? 'Saving…' : 'Save'}
                   </button>
                 </div>
               )}
