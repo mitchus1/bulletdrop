@@ -26,33 +26,119 @@ interface UserProfile {
   storage_limit: number
   is_premium?: boolean
   premium_expires_at?: string
+  matrix_effect_enabled?: boolean
 }
 
 // (removed Domain interface; editing and domain selection moved to Settings)
 
-// Matrix rain animation component
-const MatrixBackground = () => (
-  <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-30">
-    {Array.from({ length: 15 }).map((_, i) => (
-      <div
-        key={i}
-        className="absolute text-green-400 font-mono text-xs animate-pulse select-none"
-        style={{
-          insetInlineStart: `${(i * 7) % 100}%`,
-          insetBlockStart: '-20px',
-          animation: `matrixRain ${3 + Math.random() * 2}s linear infinite`,
-          animationDelay: `${Math.random() * 2}s`
-        }}
-      >
-        {Array.from({ length: 20 }).map((_, j) => (
-          <div key={j} className="block">
-            {String.fromCharCode(0x30A0 + Math.random() * 96)}
+// Advanced Matrix rain animation component
+const MatrixBackground = () => {
+  const [columns, setColumns] = useState(0)
+  const [windowHeight, setWindowHeight] = useState(0)
+
+  useEffect(() => {
+    const updateDimensions = () => {
+      const width = window.innerWidth
+      const height = window.innerHeight
+      // Calculate columns based on screen width (approx 40px per column)
+      const columnCount = Math.floor(width / 40)
+      setColumns(columnCount)
+      setWindowHeight(height)
+    }
+
+    updateDimensions()
+    window.addEventListener('resize', updateDimensions)
+    return () => window.removeEventListener('resize', updateDimensions)
+  }, [])
+
+  // Calculate characters per column based on screen height
+  const charsPerColumn = Math.floor(windowHeight / 20) + 10
+
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-40">
+      {Array.from({ length: columns }).map((_, i) => {
+        // More varied positioning with some randomness
+        const basePosition = (i / columns) * 100
+        const randomOffset = (Math.random() - 0.5) * 5
+        const position = Math.max(0, Math.min(95, basePosition + randomOffset))
+        
+        // More varied animation speeds and delays
+        const animationDuration = 2 + Math.random() * 4 // 2-6 seconds
+        const animationDelay = Math.random() * 6 // 0-6 seconds delay
+        const opacity = 0.5 + Math.random() * 0.5 // Varied opacity
+
+        return (
+          <div
+            key={`${i}-${columns}`} // Key includes columns to force re-render on resize
+            className="absolute text-green-400 font-mono text-xs select-none"
+            style={{
+              left: `${position}%`,
+              top: '-50vh',
+              opacity: opacity,
+              animation: `matrixRain ${animationDuration}s linear infinite`,
+              animationDelay: `${animationDelay}s`,
+              fontSize: `${10 + Math.random() * 4}px`, // Varied font sizes
+              transform: `rotate(${(Math.random() - 0.5) * 4}deg)` // Slight rotation
+            }}
+          >
+            {Array.from({ length: charsPerColumn }).map((_, j) => {
+              // Mix of different character sets for variety
+              const charSets = [
+                () => String.fromCharCode(0x30A0 + Math.random() * 96), // Katakana
+                () => String.fromCharCode(0x0030 + Math.random() * 10), // Numbers
+                () => String.fromCharCode(0x0041 + Math.random() * 26), // Letters
+                () => String.fromCharCode(0x25A0 + Math.random() * 32), // Geometric shapes
+              ]
+              const randomCharSet = charSets[Math.floor(Math.random() * charSets.length)]
+              
+              return (
+                <div 
+                  key={j} 
+                  className="block leading-tight"
+                  style={{
+                    opacity: Math.max(0.1, 1 - (j / charsPerColumn) * 0.8), // Fade towards bottom
+                    animationDelay: `${j * 0.1}s` // Stagger character appearance
+                  }}
+                >
+                  {randomCharSet()}
+                </div>
+              )
+            })}
           </div>
-        ))}
-      </div>
-    ))}
-  </div>
-);
+        )
+      })}
+      
+      {/* Additional faster rain drops for more density */}
+      {Array.from({ length: Math.floor(columns * 0.3) }).map((_, i) => {
+        const position = Math.random() * 100
+        const animationDuration = 1 + Math.random() * 2 // Faster drops
+        const animationDelay = Math.random() * 8
+        
+        return (
+          <div
+            key={`fast-${i}-${columns}`}
+            className="absolute text-green-300 font-mono text-xs select-none"
+            style={{
+              left: `${position}%`,
+              top: '-30vh',
+              opacity: 0.6,
+              animation: `matrixRain ${animationDuration}s linear infinite`,
+              animationDelay: `${animationDelay}s`,
+              fontSize: '8px',
+              filter: 'blur(0.5px)'
+            }}
+          >
+            {Array.from({ length: 5 }).map((_, j) => (
+              <div key={j} className="block">
+                •
+              </div>
+            ))}
+          </div>
+        )
+      })}
+    </div>
+  )
+};
 
 export default function Profile() {
   const { username } = useParams<{ username: string }>()
@@ -281,8 +367,8 @@ export default function Profile() {
           />
         </div>
       )}
-    {/* Matrix animation overlay (above video) */}
-    <MatrixBackground />
+    {/* Matrix animation overlay (above video) - only if enabled */}
+    {profile?.matrix_effect_enabled !== false && <MatrixBackground />}
       
     {/* Dark overlay for better readability, above video */}
     <div className="absolute inset-0 bg-black/20 z-10 pointer-events-none"></div>

@@ -51,6 +51,7 @@ class UserResponse(BaseModel):
     is_premium: bool = False
     premium_expires_at: Optional[datetime] = None
     default_image_effect: Optional[str] = None
+    matrix_effect_enabled: Optional[bool] = True
     created_at: datetime
     last_login: Optional[datetime] = None
 

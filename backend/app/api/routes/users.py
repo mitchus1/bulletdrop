@@ -22,6 +22,7 @@ class UserUpdateRequest(BaseModel):
     favorite_song: Optional[str] = None
     preferred_domain_id: Optional[int] = None
     default_image_effect: Optional[str] = None  # 'rgb' or None
+    matrix_effect_enabled: Optional[bool] = None
 
 class AccountUpdateRequest(BaseModel):
     username: Optional[str] = None

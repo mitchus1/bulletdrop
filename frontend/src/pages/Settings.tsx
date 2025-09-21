@@ -23,6 +23,7 @@ interface ProfileData {
   favorite_song?: string
   preferred_domain_id?: number
   default_image_effect?: string | null
+  matrix_effect_enabled?: boolean
 }
 
 interface AccountData {
@@ -77,7 +78,8 @@ export default function Settings() {
         background_color: user.background_color || '',
         favorite_song: user.favorite_song || '',
         preferred_domain_id: user.preferred_domain_id,
-        default_image_effect: (user as any).default_image_effect || null
+        default_image_effect: (user as any).default_image_effect || null,
+        matrix_effect_enabled: (user as any).matrix_effect_enabled !== false
       })
       setAccountData({
         email: user.email,
@@ -540,6 +542,26 @@ export default function Settings() {
                         placeholder="#000000"
                       />
                     </div>
+                  </div>
+
+                  {/* Matrix Effect Toggle */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Profile Effects</label>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="checkbox"
+                        id="matrix-effect"
+                        checked={profileData.matrix_effect_enabled ?? true}
+                        onChange={(e) => setProfileData(prev => ({ ...prev, matrix_effect_enabled: e.target.checked }))}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor="matrix-effect" className="text-sm text-gray-700 dark:text-gray-300">
+                        Enable Matrix rain effect on profile page
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Show animated Matrix-style digital rain on your profile background
+                    </p>
                   </div>
 
                   <button

@@ -117,6 +117,8 @@ class User(Base):
     # Preferences
     # Default image effect applied to new image uploads (None, 'rgb')
     default_image_effect = Column(String(20), nullable=True, default=None)
+    # Matrix background effect on profile page (default: True)
+    matrix_effect_enabled = Column(Boolean, default=True)
     
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow)
