@@ -18,12 +18,17 @@ from sqlalchemy import func, and_, desc, text
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import hashlib
+import json
+import logging
 from fastapi import Request
 
 from app.models.views import FileView, ProfileView, ViewSummary
 from app.models.upload import Upload
 from app.models.user import User
 from app.schemas.analytics import ViewCreate, ViewAnalytics, TrendingContent, ViewStatsResponse
+from app.services.redis_service import redis_service
+
+logger = logging.getLogger(__name__)
 
 
 class AnalyticsService:
@@ -113,10 +118,18 @@ class AnalyticsService:
         
         # Update upload view count
         upload.view_count = (upload.view_count or 0) + 1
-        
+
+        # Increment Redis view counters
+        redis_service.increment_file_view(upload_id)
+
+        # Add to trending data
+        redis_service.add_to_trending("file", upload_id, score=1.0, period="24h")
+        redis_service.add_to_trending("file", upload_id, score=1.0, period="7d")
+        redis_service.add_to_trending("file", upload_id, score=1.0, period="30d")
+
         db.commit()
         db.refresh(file_view)
-        
+
         return file_view
     
     @staticmethod
@@ -188,55 +201,75 @@ class AnalyticsService:
         )
         
         db.add(profile_view)
+
+        # Increment Redis profile view counter
+        redis_service.increment_profile_view(profile_user_id)
+
+        # Add to trending profiles
+        redis_service.add_to_trending("profile", profile_user_id, score=1.0, period="24h")
+        redis_service.add_to_trending("profile", profile_user_id, score=1.0, period="7d")
+        redis_service.add_to_trending("profile", profile_user_id, score=1.0, period="30d")
+
         db.commit()
         db.refresh(profile_view)
-        
+
         return profile_view
     
     @staticmethod
     def get_file_analytics(db: Session, upload_id: int) -> ViewAnalytics:
         """
         Get comprehensive analytics for a specific file.
-        
+        Uses Redis caching to optimize database queries.
+
         Args:
             db: Database session
             upload_id: ID of the file to analyze
-            
+
         Returns:
             ViewAnalytics object with comprehensive statistics
         """
+        # Try to get cached analytics first
+        cached_analytics = redis_service.get_cached_analytics("file", upload_id)
+        if cached_analytics:
+            logger.debug(f"Using cached analytics for file {upload_id}")
+            return ViewAnalytics(**cached_analytics)
+
+        logger.debug(f"Computing fresh analytics for file {upload_id}")
         now = datetime.utcnow()
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
-        
-        # Total views
-        total_views = db.query(func.count(FileView.id)).filter(
-            FileView.upload_id == upload_id
-        ).scalar() or 0
-        
-        # Unique viewers (by IP)
+
+        # Try to get from Redis view counters first, fallback to DB
+        redis_view_data = redis_service.get_file_view_count(upload_id)
+        if redis_view_data:
+            total_views = redis_view_data.get("total", 0)
+            views_today = redis_view_data.get("today", 0)
+        else:
+            # Fallback to database queries
+            total_views = db.query(func.count(FileView.id)).filter(
+                FileView.upload_id == upload_id
+            ).scalar() or 0
+
+            views_today = db.query(func.count(FileView.id)).filter(
+                and_(
+                    FileView.upload_id == upload_id,
+                    FileView.viewed_at >= today
+                )
+            ).scalar() or 0
+
+        # These require DB queries (could be optimized further with Redis aggregations)
         unique_viewers = db.query(func.count(func.distinct(FileView.viewer_ip))).filter(
             FileView.upload_id == upload_id
         ).scalar() or 0
-        
-        # Views today
-        views_today = db.query(func.count(FileView.id)).filter(
-            and_(
-                FileView.upload_id == upload_id,
-                FileView.viewed_at >= today
-            )
-        ).scalar() or 0
-        
-        # Views this week
+
         views_this_week = db.query(func.count(FileView.id)).filter(
             and_(
                 FileView.upload_id == upload_id,
                 FileView.viewed_at >= week_ago
             )
         ).scalar() or 0
-        
-        # Views this month
+
         views_this_month = db.query(func.count(FileView.id)).filter(
             and_(
                 FileView.upload_id == upload_id,
@@ -274,7 +307,7 @@ class AnalyticsService:
             for country, count in top_countries_query.all()
         ]
         
-        return ViewAnalytics(
+        analytics_data = ViewAnalytics(
             content_id=upload_id,
             content_type="file",
             total_views=total_views,
@@ -286,51 +319,69 @@ class AnalyticsService:
             top_countries=top_countries,
             hourly_distribution=[]  # Could implement later
         )
+
+        # Cache the analytics data for future requests
+        redis_service.cache_analytics("file", upload_id, analytics_data.dict())
+
+        return analytics_data
     
     @staticmethod
     def get_profile_analytics(db: Session, user_id: int) -> ViewAnalytics:
         """
         Get comprehensive analytics for a specific user profile.
-        
+        Uses Redis caching to optimize database queries.
+
         Args:
             db: Database session
             user_id: ID of the user profile to analyze
-            
+
         Returns:
             ViewAnalytics object with comprehensive statistics
         """
+        # Try to get cached analytics first
+        cached_analytics = redis_service.get_cached_analytics("profile", user_id)
+        if cached_analytics:
+            logger.debug(f"Using cached analytics for profile {user_id}")
+            return ViewAnalytics(**cached_analytics)
+
+        logger.debug(f"Computing fresh analytics for profile {user_id}")
         now = datetime.utcnow()
         today = now.replace(hour=0, minute=0, second=0, microsecond=0)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
-        
-        # Total views
-        total_views = db.query(func.count(ProfileView.id)).filter(
-            ProfileView.profile_user_id == user_id
-        ).scalar() or 0
-        
-        # Unique viewers (by IP)
+
+        # Get profile view count from Redis if available
+        redis_profile_views = redis_service._safe_operation(
+            redis_service.redis_client.get,
+            f"views:profile:{user_id}"
+        )
+
+        if redis_profile_views:
+            total_views = int(redis_profile_views)
+        else:
+            total_views = db.query(func.count(ProfileView.id)).filter(
+                ProfileView.profile_user_id == user_id
+            ).scalar() or 0
+
+        # These require DB queries (could be optimized further)
         unique_viewers = db.query(func.count(func.distinct(ProfileView.viewer_ip))).filter(
             ProfileView.profile_user_id == user_id
         ).scalar() or 0
-        
-        # Views today
+
         views_today = db.query(func.count(ProfileView.id)).filter(
             and_(
                 ProfileView.profile_user_id == user_id,
                 ProfileView.viewed_at >= today
             )
         ).scalar() or 0
-        
-        # Views this week
+
         views_this_week = db.query(func.count(ProfileView.id)).filter(
             and_(
                 ProfileView.profile_user_id == user_id,
                 ProfileView.viewed_at >= week_ago
             )
         ).scalar() or 0
-        
-        # Views this month
+
         views_this_month = db.query(func.count(ProfileView.id)).filter(
             and_(
                 ProfileView.profile_user_id == user_id,
@@ -353,7 +404,7 @@ class AnalyticsService:
             for view in recent_views
         ]
         
-        return ViewAnalytics(
+        analytics_data = ViewAnalytics(
             content_id=user_id,
             content_type="profile",
             total_views=total_views,
@@ -365,74 +416,128 @@ class AnalyticsService:
             top_countries=[],  # Could implement later
             hourly_distribution=[]  # Could implement later
         )
+
+        # Cache the analytics data for future requests
+        redis_service.cache_analytics("profile", user_id, analytics_data.dict())
+
+        return analytics_data
     
     @staticmethod
     def get_trending_content(db: Session, time_period: str = "24h") -> TrendingContent:
         """
         Get trending files and profiles based on recent view activity.
-        
+        Uses Redis sorted sets for efficient trending calculations.
+
         Args:
             db: Database session
             time_period: Time period for trending calculation ("24h", "7d", "30d")
-            
+
         Returns:
             TrendingContent object with trending files and profiles
         """
-        now = datetime.utcnow()
-        
-        # Calculate time cutoff
-        if time_period == "24h":
-            cutoff = now - timedelta(hours=24)
-        elif time_period == "7d":
-            cutoff = now - timedelta(days=7)
-        elif time_period == "30d":
-            cutoff = now - timedelta(days=30)
-        else:
-            cutoff = now - timedelta(hours=24)  # Default to 24h
-        
-        # Trending files
-        trending_files_query = db.query(
-            FileView.upload_id,
-            func.count(FileView.id).label('view_count'),
-            func.count(func.distinct(FileView.viewer_ip)).label('unique_viewers')
-        ).join(Upload).filter(
-            FileView.viewed_at >= cutoff
-        ).group_by(FileView.upload_id).order_by(desc('view_count')).limit(10)
-        
+        # Try to get trending content from Redis first
+        trending_files_redis = redis_service.get_trending("file", time_period, limit=10)
+        trending_profiles_redis = redis_service.get_trending("profile", time_period, limit=10)
+
         trending_files = []
-        for upload_id, view_count, unique_viewers in trending_files_query.all():
-            upload = db.query(Upload).filter(Upload.id == upload_id).first()
-            if upload:
-                trending_files.append({
-                    "upload_id": upload_id,
-                    "filename": upload.original_filename,
-                    "upload_url": upload.upload_url,
-                    "view_count": view_count,
-                    "unique_viewers": unique_viewers,
-                    "created_at": upload.created_at.isoformat()
-                })
-        
-        # Trending profiles
-        trending_profiles_query = db.query(
-            ProfileView.profile_user_id,
-            func.count(ProfileView.id).label('view_count'),
-            func.count(func.distinct(ProfileView.viewer_ip)).label('unique_viewers')
-        ).join(User, ProfileView.profile_user_id == User.id).filter(
-            ProfileView.viewed_at >= cutoff
-        ).group_by(ProfileView.profile_user_id).order_by(desc('view_count')).limit(10)
-        
         trending_profiles = []
-        for user_id, view_count, unique_viewers in trending_profiles_query.all():
-            user = db.query(User).filter(User.id == user_id).first()
-            if user:
-                trending_profiles.append({
-                    "user_id": user_id,
-                    "username": user.username,
-                    "display_name": user.display_name,
-                    "avatar_url": user.avatar_url,
-                    "view_count": view_count,
-                    "unique_viewers": unique_viewers
-                })
+
+        # If Redis has trending data, use it
+        if trending_files_redis:
+            logger.debug(f"Using cached trending files for {time_period}")
+            for upload_id, score in trending_files_redis:
+                upload = db.query(Upload).filter(Upload.id == int(upload_id)).first()
+                if upload:
+                    trending_files.append({
+                        "upload_id": int(upload_id),
+                        "filename": upload.original_filename,
+                        "upload_url": upload.upload_url,
+                        "view_count": int(score),
+                        "unique_viewers": 0,  # Could be enhanced
+                        "created_at": upload.created_at.isoformat()
+                    })
+        else:
+            # Fallback to database calculation
+            logger.debug(f"Computing fresh trending files for {time_period}")
+            now = datetime.utcnow()
+
+            # Calculate time cutoff
+            if time_period == "24h":
+                cutoff = now - timedelta(hours=24)
+            elif time_period == "7d":
+                cutoff = now - timedelta(days=7)
+            elif time_period == "30d":
+                cutoff = now - timedelta(days=30)
+            else:
+                cutoff = now - timedelta(hours=24)  # Default to 24h
+
+            # Trending files
+            trending_files_query = db.query(
+                FileView.upload_id,
+                func.count(FileView.id).label('view_count'),
+                func.count(func.distinct(FileView.viewer_ip)).label('unique_viewers')
+            ).join(Upload).filter(
+                FileView.viewed_at >= cutoff
+            ).group_by(FileView.upload_id).order_by(desc('view_count')).limit(10)
+
+            for upload_id, view_count, unique_viewers in trending_files_query.all():
+                upload = db.query(Upload).filter(Upload.id == upload_id).first()
+                if upload:
+                    trending_files.append({
+                        "upload_id": upload_id,
+                        "filename": upload.original_filename,
+                        "upload_url": upload.upload_url,
+                        "view_count": int(view_count),
+                        "unique_viewers": int(unique_viewers),
+                        "created_at": upload.created_at.isoformat()
+                    })
+
+        # Handle trending profiles
+        if trending_profiles_redis:
+            logger.debug(f"Using cached trending profiles for {time_period}")
+            for user_id, score in trending_profiles_redis:
+                user = db.query(User).filter(User.id == int(user_id)).first()
+                if user:
+                    trending_profiles.append({
+                        "user_id": int(user_id),
+                        "username": user.username,
+                        "display_name": user.display_name,
+                        "avatar_url": user.avatar_url,
+                        "view_count": int(score),
+                        "unique_viewers": 0  # Could be enhanced
+                    })
+        else:
+            # Fallback to database calculation for profiles
+            if not trending_files_redis:  # Only compute if we're already doing DB queries
+                now = datetime.utcnow()
+                if time_period == "24h":
+                    cutoff = now - timedelta(hours=24)
+                elif time_period == "7d":
+                    cutoff = now - timedelta(days=7)
+                elif time_period == "30d":
+                    cutoff = now - timedelta(days=30)
+                else:
+                    cutoff = now - timedelta(hours=24)
+
+                trending_profiles_query = db.query(
+                    ProfileView.profile_user_id,
+                    func.count(ProfileView.id).label('view_count'),
+                    func.count(func.distinct(ProfileView.viewer_ip)).label('unique_viewers')
+                ).join(User, ProfileView.profile_user_id == User.id).filter(
+                    ProfileView.viewed_at >= cutoff
+                ).group_by(ProfileView.profile_user_id).order_by(desc('view_count')).limit(10)
+
+                for user_id, view_count, unique_viewers in trending_profiles_query.all():
+                    user = db.query(User).filter(User.id == user_id).first()
+                    if user:
+                        trending_profiles.append({
+                            "user_id": user_id,
+                            "username": user.username,
+                            "display_name": user.display_name,
+                            "avatar_url": user.avatar_url,
+                            "view_count": int(view_count),
+                            "unique_viewers": int(unique_viewers)
+                        })
         
         return TrendingContent(
             trending_files=trending_files,
@@ -444,43 +549,60 @@ class AnalyticsService:
     def get_quick_stats(db: Session, content_type: str, content_id: int) -> ViewStatsResponse:
         """
         Get quick view statistics for a file or profile.
-        
+        Uses Redis for fast access to view counts.
+
         Args:
             db: Database session
             content_type: Type of content ("file" or "profile")
             content_id: ID of the content
-            
+
         Returns:
             ViewStatsResponse with quick statistics
         """
         if content_type == "file":
-            total_views = db.query(func.count(FileView.id)).filter(
-                FileView.upload_id == content_id
-            ).scalar() or 0
-            
+            # Try to get from Redis first
+            redis_view_data = redis_service.get_file_view_count(content_id)
+            if redis_view_data:
+                total_views = redis_view_data.get("total", 0)
+            else:
+                total_views = db.query(func.count(FileView.id)).filter(
+                    FileView.upload_id == content_id
+                ).scalar() or 0
+
+            # These still require DB queries (could be optimized further)
             unique_viewers = db.query(func.count(func.distinct(FileView.viewer_ip))).filter(
                 FileView.upload_id == content_id
             ).scalar() or 0
-            
+
             last_viewed = db.query(func.max(FileView.viewed_at)).filter(
                 FileView.upload_id == content_id
             ).scalar()
-            
+
         elif content_type == "profile":
-            total_views = db.query(func.count(ProfileView.id)).filter(
-                ProfileView.profile_user_id == content_id
-            ).scalar() or 0
-            
+            # Try to get from Redis first
+            redis_profile_views = redis_service._safe_operation(
+                redis_service.redis_client.get,
+                f"views:profile:{content_id}"
+            )
+
+            if redis_profile_views:
+                total_views = int(redis_profile_views)
+            else:
+                total_views = db.query(func.count(ProfileView.id)).filter(
+                    ProfileView.profile_user_id == content_id
+                ).scalar() or 0
+
+            # These still require DB queries (could be optimized further)
             unique_viewers = db.query(func.count(func.distinct(ProfileView.viewer_ip))).filter(
                 ProfileView.profile_user_id == content_id
             ).scalar() or 0
-            
+
             last_viewed = db.query(func.max(ProfileView.viewed_at)).filter(
                 ProfileView.profile_user_id == content_id
             ).scalar()
         else:
             raise ValueError(f"Invalid content type: {content_type}")
-        
+
         return ViewStatsResponse(
             total_views=total_views,
             unique_viewers=unique_viewers,

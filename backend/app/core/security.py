@@ -25,9 +25,13 @@ from jose import JWTError, jwt
 from fastapi import HTTPException, status, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
+import logging
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
+from app.services.redis_service import redis_service
+
+logger = logging.getLogger(__name__)
 
 # Initialize password context for bcrypt hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -104,6 +108,32 @@ def verify_token(token: str) -> Optional[dict]:
     except JWTError:
         return None
 
+
+def get_user_by_username_cached(db: Session, username: str) -> Optional[User]:
+    """
+    Get user by username with Redis caching for performance.
+
+    For now, disabled caching to avoid SQLAlchemy session issues.
+    The database lookup is fast enough for most use cases.
+
+    Args:
+        db (Session): Database session
+        username (str): Username to look up
+
+    Returns:
+        Optional[User]: User object if found, None otherwise
+    """
+    # For now, always use database lookup to avoid session issues
+    logger.debug(f"Fetching user {username} from database")
+    user = db.query(User).filter(User.username == username).first()
+
+    # TODO: Implement proper session-aware caching later
+    # if user:
+    #     # Cache user data for future lookups
+    #     pass
+
+    return user
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
     db: Session = Depends(get_db)
@@ -145,7 +175,7 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    user = db.query(User).filter(User.username == username).first()
+    user = get_user_by_username_cached(db, username)
     if user is None:
         raise credentials_exception
 
@@ -205,7 +235,7 @@ def get_current_user_optional(
         if username is None:
             return None
 
-        user = db.query(User).filter(User.username == username).first()
+        user = get_user_by_username_cached(db, username)
         if user is None or not user.is_active:
             return None
 
@@ -237,7 +267,7 @@ def get_current_user_with_api_key(
         if payload:
             username: str = payload.get("sub")
             if username:
-                user = db.query(User).filter(User.username == username).first()
+                user = get_user_by_username_cached(db, username)
                 if user and user.is_active:
                     return user
 

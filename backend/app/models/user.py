@@ -114,6 +114,10 @@ class User(Base):
     # API access
     api_key = Column(String(255), unique=True, nullable=True)
 
+    # Referral system
+    referral_code = Column(String(20), unique=True, nullable=True)
+    referred_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+
     # Preferences
     # Default image effect applied to new image uploads (None, 'rgb')
     default_image_effect = Column(String(20), nullable=True, default=None)
@@ -131,6 +135,10 @@ class User(Base):
     preferred_domain = relationship("Domain", foreign_keys=[preferred_domain_id])
     profile_views_received = relationship("ProfileView", foreign_keys="ProfileView.profile_user_id", back_populates="profile_user", cascade="all, delete-orphan")
     profile_views_made = relationship("ProfileView", foreign_keys="ProfileView.viewer_user_id", back_populates="viewer_user")
+
+    # Referral relationships
+    referrer = relationship("User", remote_side=[id], foreign_keys=[referred_by])
+    referrals = relationship("User", foreign_keys=[referred_by], remote_side=[referred_by], overlaps="referrer")
     
     def has_active_premium(self) -> bool:
         """Check if user has active premium subscription"""

@@ -22,7 +22,7 @@ router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 @router.post("/register", response_model=Token)
-async def register(user: UserCreate, db: Session = Depends(get_db)):
+async def register(user: UserCreate, referral_code: str = None, db: Session = Depends(get_db)):
     """Register a new user account."""
     # Check if email exists
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -53,6 +53,24 @@ async def register(user: UserCreate, db: Session = Depends(get_db)):
     db.add(db_user)
     db.commit()
     db.refresh(db_user)
+
+    # Track referral if provided
+    referral_success = False
+    if referral_code:
+        from app.services.user_acquisition import UserAcquisitionService
+        referral_success = UserAcquisitionService.track_referral_signup(
+            db, referral_code, db_user
+        )
+
+    # Track signup method for analytics
+    from app.services.redis_service import redis_service
+    signup_method = "referral" if referral_success else "direct"
+    redis_service._safe_operation(
+        redis_service.redis_client.hincrby,
+        "platform:signups:methods",
+        signup_method,
+        1
+    )
 
     # Create access token
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)

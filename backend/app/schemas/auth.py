@@ -43,11 +43,11 @@ class UserResponse(BaseModel):
     custom_domain: Optional[str] = None
     preferred_domain_id: Optional[int] = None
     storage_used: int
-    storage_limit: int
-    upload_count: int
-    is_active: bool
-    is_admin: bool
-    is_verified: bool
+    storage_limit: Optional[int] = 1073741824  # 1GB default
+    upload_count: Optional[int] = 0
+    is_active: bool = True
+    is_admin: bool = False
+    is_verified: Optional[bool] = False
     is_premium: bool = False
     premium_expires_at: Optional[datetime] = None
     default_image_effect: Optional[str] = None
