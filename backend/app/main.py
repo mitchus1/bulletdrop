@@ -71,6 +71,9 @@ app.include_router(growth.router, prefix="/api/growth", tags=["growth"])
 app.include_router(landing.router, prefix="/api/landing", tags=["landing"])
 
 
+
+
+
 @app.get("/", summary="Root endpoint", description="Returns API status message")
 async def root():
     """

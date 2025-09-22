@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security.utils import get_authorization_scheme_param
 import secrets
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.core.database import get_db
 from app.core.security import get_current_user, get_current_active_user, verify_password, get_password_hash
 from app.models import User
@@ -35,7 +36,8 @@ class PasswordChangeRequest(BaseModel):
 @router.get("/{username}", response_model=UserResponse)
 async def get_user_profile(username: str, db: Session = Depends(get_db)):
     """Get user profile by username."""
-    user = db.query(User).filter(User.username == username).first()
+    # Case-insensitive username lookup
+    user = db.query(User).filter(func.lower(User.username) == username.lower()).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -115,7 +117,7 @@ async def update_account(
     # Check if username is already taken (if being updated)
     if account_update.username and account_update.username != current_user.username:
         existing_user = db.query(User).filter(
-            User.username == account_update.username,
+            func.lower(User.username) == account_update.username.lower(),
             User.id != current_user.id
         ).first()
         if existing_user:
@@ -127,7 +129,7 @@ async def update_account(
     # Check if email is already taken (if being updated)  
     if account_update.email and account_update.email != current_user.email:
         existing_user = db.query(User).filter(
-            User.email == account_update.email,
+            func.lower(User.email) == account_update.email.lower(),
             User.id != current_user.id
         ).first()
         if existing_user:
