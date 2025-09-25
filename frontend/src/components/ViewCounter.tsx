@@ -43,7 +43,10 @@ export default function ViewCounter({
       }
     };
 
-    fetchStats();
+    // Only fetch if we have a valid contentId
+    if (contentId) {
+      fetchStats();
+    }
   }, [contentType, contentId]);
 
   if (loading) {

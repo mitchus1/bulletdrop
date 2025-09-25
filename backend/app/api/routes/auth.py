@@ -16,6 +16,7 @@ from app.models import User
 from app.schemas.auth import UserCreate, UserLogin, Token, UserResponse, OAuthCallback
 from app.core.config import settings
 from app.services.oauth import oauth, get_google_user_info, get_github_user_info, get_discord_user_info
+from app.services.security_monitor import security_monitor
 import secrets
 
 router = APIRouter()
@@ -81,10 +82,22 @@ async def register(user: UserCreate, referral_code: str = None, db: Session = De
     return {"access_token": access_token, "token_type": "bearer"}
 
 @router.post("/login", response_model=Token)
-async def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+async def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Authenticate user and return JWT token."""
     user = authenticate_user(db, form_data.username, form_data.password)
     if not user:
+        # Log failed login attempt
+        ip_address = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or \
+                    request.headers.get("x-real-ip") or \
+                    (request.client.host if request.client else "unknown")
+        user_agent = request.headers.get("user-agent", "")
+
+        await security_monitor.log_failed_login(
+            ip_address=ip_address,
+            username=form_data.username,
+            user_agent=user_agent
+        )
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",

@@ -22,7 +22,7 @@ import uvicorn
 from pathlib import Path
 import io
 from app.core.config import settings
-from app.api.routes import auth, users, uploads, domains, admin, stripe, analytics, growth, landing
+from app.api.routes import auth, users, uploads, domains, admin, stripe, analytics, growth, landing, security
 from app.core.database import engine, get_db
 from app.models.upload import Upload
 from app.core.database import Base
@@ -69,6 +69,7 @@ app.include_router(stripe.router, prefix="/api/stripe", tags=["stripe"])
 app.include_router(analytics.router, tags=["analytics"])
 app.include_router(growth.router, prefix="/api/growth", tags=["growth"])
 app.include_router(landing.router, prefix="/api/landing", tags=["landing"])
+app.include_router(security.router, tags=["admin", "security"])
 
 
 

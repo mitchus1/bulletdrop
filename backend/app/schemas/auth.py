@@ -1,16 +1,71 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional
 from datetime import datetime
-from typing import Optional
+import re
 
 class UserCreate(BaseModel):
-    username: str
-    email: EmailStr
-    password: str
+    username: str = Field(
+        ...,
+        min_length=3,
+        max_length=30,
+        pattern="^[a-zA-Z0-9_-]+$",
+        description="Username must be 3-30 characters, alphanumeric, underscore or dash only"
+    )
+    email: EmailStr = Field(..., description="Valid email address")
+    password: str = Field(
+        ...,
+        min_length=8,
+        max_length=128,
+        description="Password must be 8-128 characters"
+    )
+
+    @validator('password')
+    def validate_password_strength(cls, v):
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters long')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must contain at least one lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must contain at least one digit')
+        return v
+
+    @validator('username')
+    def validate_username(cls, v):
+        if not v or len(v.strip()) == 0:
+            raise ValueError('Username cannot be empty')
+        if len(v) < 3 or len(v) > 30:
+            raise ValueError('Username must be 3-30 characters')
+        if not re.match(r'^[a-zA-Z0-9_-]+$', v):
+            raise ValueError('Username can only contain letters, numbers, underscores and dashes')
+        return v.strip().lower()
 
 class UserLogin(BaseModel):
-    username: str
-    password: str
+    username: str = Field(
+        ...,
+        min_length=1,
+        max_length=30,
+        description="Username or email"
+    )
+    password: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="User password"
+    )
+
+    @validator('username')
+    def validate_login_username(cls, v):
+        if not v or len(v.strip()) == 0:
+            raise ValueError('Username/email cannot be empty')
+        return v.strip().lower()
+
+    @validator('password')
+    def validate_login_password(cls, v):
+        if not v or len(v.strip()) == 0:
+            raise ValueError('Password cannot be empty')
+        return v
 
 class Token(BaseModel):
     access_token: str

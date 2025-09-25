@@ -123,14 +123,61 @@ def get_user_by_username_cached(db: Session, username: str) -> Optional[User]:
     Returns:
         Optional[User]: User object if found, None otherwise
     """
-    # For now, always use database lookup to avoid session issues
+    from app.services.redis_service import redis_service
+
+    # Generate cache key with short TTL to balance performance vs security
+    cache_key = f"user:username:{username}"
+
+    # Try to get user from cache first
+    if redis_service.is_connected():
+        try:
+            cached_user_data = redis_service.redis_client.get(cache_key)
+            if cached_user_data:
+                import json
+                user_dict = json.loads(cached_user_data)
+                logger.debug(f"Retrieved user {username} from cache")
+
+                # Reconstruct user object from cached data - avoid session issues
+                user = User()
+                for key, value in user_dict.items():
+                    if hasattr(user, key):
+                        setattr(user, key, value)
+
+                # Convert datetime strings back to datetime objects
+                if user_dict.get("created_at"):
+                    from datetime import datetime
+                    user.created_at = datetime.fromisoformat(user_dict["created_at"])
+
+                return user
+        except Exception as e:
+            logger.warning(f"Cache retrieval failed for user {username}: {e}")
+
+    # Fetch from database if not in cache
     logger.debug(f"Fetching user {username} from database")
     user = db.query(User).filter(User.username == username).first()
 
-    # TODO: Implement proper session-aware caching later
-    # if user:
-    #     # Cache user data for future lookups
-    #     pass
+    # Cache the user data with 5-minute TTL for security
+    if user and redis_service.is_connected():
+        try:
+            # Only cache essential, non-sensitive user data
+            user_dict = {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "is_active": user.is_active,
+                "is_admin": user.is_admin,
+                "is_premium": user.is_premium,
+                "created_at": user.created_at.isoformat() if user.created_at else None
+            }
+            import json
+            redis_service.redis_client.setex(
+                cache_key,
+                300,  # 5 minutes TTL for security
+                json.dumps(user_dict, default=str)
+            )
+            logger.debug(f"Cached user {username} for 5 minutes")
+        except Exception as e:
+            logger.warning(f"Cache storage failed for user {username}: {e}")
 
     return user
 

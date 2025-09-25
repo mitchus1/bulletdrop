@@ -20,6 +20,7 @@ from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.services.redis_service import redis_service
+from app.services.security_monitor import security_monitor
 from app.core.config import settings
 import logging
 
@@ -27,24 +28,34 @@ logger = logging.getLogger(__name__)
 
 class RateLimitConfig:
     """Rate limiting configuration for different endpoint types."""
-    
+
     @classmethod
     def get_auth_limits(cls):
         return settings.RATE_LIMIT_AUTH_PER_MINUTE, settings.RATE_LIMIT_AUTH_PER_HOUR
-    
+
     @classmethod
     def get_api_limits(cls):
         return settings.RATE_LIMIT_API_PER_MINUTE, settings.RATE_LIMIT_API_PER_HOUR
-    
+
     @classmethod
     def get_upload_limits(cls):
         return settings.RATE_LIMIT_UPLOAD_PER_MINUTE, settings.RATE_LIMIT_UPLOAD_PER_HOUR
-    
+
     @classmethod
     def get_admin_limits(cls):
         # Admin endpoints use same limits as general API
         return settings.RATE_LIMIT_API_PER_MINUTE, settings.RATE_LIMIT_API_PER_HOUR
-    
+
+    @classmethod
+    def get_user_limits(cls):
+        """Per-user rate limits (set relatively high for legitimate use)"""
+        return 500, 5000  # 500/minute, 5000/hour - generous limits for legitimate users
+
+    @classmethod
+    def get_user_upload_limits(cls):
+        """Per-user upload limits"""
+        return 50, 200  # 50/minute, 200/hour - reasonable for uploads
+
     @classmethod
     def get_block_duration(cls):
         return settings.RATE_LIMIT_BLOCK_DURATION
@@ -209,22 +220,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return minute_limit, 60, hour_limit, 3600
     
     async def dispatch(self, request: Request, call_next):
-        """Process rate limiting for incoming requests."""
+        """Process rate limiting for incoming requests with both IP and user-based limits."""
         # Skip rate limiting if disabled
         if not settings.RATE_LIMIT_ENABLED:
             return await call_next(request)
-            
+
         # Skip rate limiting for health checks and static files
         if request.url.path in ["/health", "/docs", "/redoc", "/openapi.json"]:
             return await call_next(request)
-        
+
         ip = self.get_client_ip(request)
-        
+
         # Check if IP is whitelisted (skip all rate limiting)
         if await self.rate_limiter.is_ip_whitelisted(ip):
             logger.debug(f"IP {ip} is whitelisted, skipping rate limiting")
             return await call_next(request)
-        
+
         # Check if IP is blocked
         if await self.rate_limiter.is_ip_blocked(ip):
             return JSONResponse(
@@ -235,37 +246,75 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 },
                 headers={"Retry-After": str(RateLimitConfig.get_block_duration())}
             )
-        
-        # Get rate limits for this endpoint type
+
+        # Get rate limits for this endpoint type (IP-based)
         minute_limit, minute_window, hour_limit, hour_window = self.get_rate_limits(request)
-        
-        # Check minute-based rate limit
+
+        # Check IP-based rate limits
         key_minute = f"{self.get_rate_limit_key(request, ip)}:1m"
         is_limited_minute, rate_info_minute = await self.rate_limiter.is_rate_limited(
             key_minute, minute_limit, minute_window
         )
-        
-        # Check hour-based rate limit
+
         key_hour = f"{self.get_rate_limit_key(request, ip)}:1h"
         is_limited_hour, rate_info_hour = await self.rate_limiter.is_rate_limited(
             key_hour, hour_limit, hour_window
         )
-        
-        # If either limit is exceeded
-        if is_limited_minute or is_limited_hour:
+
+        # Try to get user from token for user-based rate limiting
+        user_id = await self.extract_user_id_from_request(request)
+        user_limited_minute = user_limited_hour = False
+        user_rate_info_minute = user_rate_info_hour = None
+
+        if user_id:
+            # Apply per-user rate limits (more generous than IP limits)
+            if "/upload" in request.url.path.lower():
+                user_minute_limit, user_hour_limit = RateLimitConfig.get_user_upload_limits()
+            else:
+                user_minute_limit, user_hour_limit = RateLimitConfig.get_user_limits()
+
+            # Check user-based rate limits
+            user_key_minute = f"user:{user_id}:1m"
+            user_limited_minute, user_rate_info_minute = await self.rate_limiter.is_rate_limited(
+                user_key_minute, user_minute_limit, 60
+            )
+
+            user_key_hour = f"user:{user_id}:1h"
+            user_limited_hour, user_rate_info_hour = await self.rate_limiter.is_rate_limited(
+                user_key_hour, user_hour_limit, 3600
+            )
+
+        # Check if any limit is exceeded (IP or user-based)
+        if is_limited_minute or is_limited_hour or user_limited_minute or user_limited_hour:
+            # Log security event for rate limit violation
+            await security_monitor.log_rate_limit_exceeded(
+                ip_address=ip,
+                endpoint=request.url.path,
+                limit_type="user-based" if user_limited_minute or user_limited_hour else "ip-based",
+                user_id=user_id,
+                username=None  # Would need to fetch username if needed
+            )
+
             # For authentication endpoints, block IP after excessive attempts
             if "auth:ip:" in key_minute and is_limited_minute:
                 await self.rate_limiter.block_ip(ip)
+                await security_monitor.log_ip_blocked(ip, "excessive_auth_attempts")
                 logger.warning(f"IP {ip} blocked due to excessive authentication attempts")
-            
-            # Use the more restrictive limit for response
-            active_rate_info = rate_info_minute if is_limited_minute else rate_info_hour
-            limit_type = "minute" if is_limited_minute else "hour"
-            
+
+            # Determine which limit was hit and use the most restrictive
+            if user_limited_minute or user_limited_hour:
+                active_rate_info = user_rate_info_minute if user_limited_minute else user_rate_info_hour
+                limit_type = "minute" if user_limited_minute else "hour"
+                limit_scope = f"user {user_id}"
+            else:
+                active_rate_info = rate_info_minute if is_limited_minute else rate_info_hour
+                limit_type = "minute" if is_limited_minute else "hour"
+                limit_scope = f"IP {ip}"
+
             return JSONResponse(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 content={
-                    "error": f"Rate limit exceeded: {active_rate_info['current']}/{active_rate_info['limit']} requests per {limit_type}",
+                    "error": f"Rate limit exceeded for {limit_scope}: {active_rate_info['current']}/{active_rate_info['limit']} requests per {limit_type}",
                     "limit": active_rate_info["limit"],
                     "remaining": active_rate_info["remaining"],
                     "reset": active_rate_info["reset"],
@@ -278,16 +327,58 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                     "Retry-After": str(active_rate_info["reset"] - int(time.time()))
                 }
             )
-        
+
         # Process the request
         response = await call_next(request)
-        
-        # Add rate limit headers to successful responses
+
+        # Add rate limit headers to successful responses (use IP-based limits for headers)
         response.headers["X-RateLimit-Limit"] = str(rate_info_minute["limit"])
         response.headers["X-RateLimit-Remaining"] = str(rate_info_minute["remaining"])
         response.headers["X-RateLimit-Reset"] = str(rate_info_minute["reset"])
-        
+
+        # Add user-based rate limit headers if user is authenticated
+        if user_rate_info_minute:
+            response.headers["X-User-RateLimit-Limit"] = str(user_rate_info_minute["limit"])
+            response.headers["X-User-RateLimit-Remaining"] = str(user_rate_info_minute["remaining"])
+            response.headers["X-User-RateLimit-Reset"] = str(user_rate_info_minute["reset"])
+
         return response
+
+    async def extract_user_id_from_request(self, request: Request) -> Optional[int]:
+        """Extract user ID from JWT token in the request for user-based rate limiting."""
+        try:
+            # Try to get Authorization header
+            auth_header = request.headers.get("Authorization")
+            if not auth_header or not auth_header.startswith("Bearer "):
+                return None
+
+            token = auth_header.split(" ")[1]
+
+            # Decode JWT token to get user ID
+            from app.core.security import verify_token
+            from app.core.config import settings
+            import jwt
+
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            username = payload.get("sub")
+
+            if username:
+                # Get user ID from username (simple cache lookup)
+                from app.services.redis_service import redis_service
+                cache_key = f"username_to_id:{username}"
+                user_id = redis_service.redis_client.get(cache_key) if redis_service.is_connected() else None
+
+                if user_id:
+                    return int(user_id)
+                else:
+                    # Fallback: would need database lookup, but we'll skip to avoid performance hit
+                    return None
+
+        except Exception:
+            # Token is invalid or expired, no user-based rate limiting
+            return None
+
+        return None
 
 # Utility functions for manual rate limiting in specific endpoints
 async def check_rate_limit(request: Request, custom_limit: int = None, custom_window: int = None):

@@ -9,6 +9,7 @@ from app.models.upload import Upload
 from app.models.domain import Domain
 from app.schemas.upload import UploadResponse, UploadListResponse, ShareXResponse
 from app.services.upload_service import upload_service
+from app.utils.security import sanitize_user_input, validate_upload_filename
 
 router = APIRouter()
 
@@ -54,8 +55,30 @@ async def upload_file(
     current_user: User = Depends(get_current_active_user),
     db: Session = Depends(get_db)
 ):
-    """Upload a file"""
+    """Upload a file with security validation"""
     try:
+        # Validate filename security
+        if file.filename:
+            is_valid, error_message = validate_upload_filename(file.filename)
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid filename: {error_message}"
+                )
+
+        # Sanitize custom name if provided
+        if custom_name:
+            custom_name = sanitize_user_input(custom_name, max_length=100)
+            if not custom_name.strip():
+                custom_name = None
+
+        # Additional file size validation (belt and suspenders approach)
+        if file.size and file.size > 50 * 1024 * 1024:  # 50MB limit
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="File too large. Maximum size is 50MB"
+            )
+
         # If no domain specified, try to use user's preferred domain
         if domain_id is None and current_user.preferred_domain_id:
             preferred_domain = db.query(Domain).filter(Domain.id == current_user.preferred_domain_id).first()

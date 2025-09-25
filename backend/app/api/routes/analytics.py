@@ -176,12 +176,34 @@ async def get_file_analytics(
         403: If user doesn't have access to view analytics
     """
     try:
-        # TODO: Add access control - users should only see analytics for their own files
-        # or make analytics public depending on requirements
-        
+        # Check if the upload exists
+        from app.models.upload import Upload
+        upload = db.query(Upload).filter(Upload.id == upload_id).first()
+        if not upload:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File not found"
+            )
+
+        # Implement access control - only file owner or admin can view detailed analytics
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to view file analytics"
+            )
+
+        # Check if user owns the file or is an admin
+        if upload.user_id != current_user.id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view analytics for this file"
+            )
+
         analytics = AnalyticsService.get_file_analytics(db=db, upload_id=upload_id)
         return analytics
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -213,12 +235,33 @@ async def get_profile_analytics(
         403: If user doesn't have access to view analytics
     """
     try:
-        # TODO: Add access control - users should only see analytics for their own profile
-        # or make analytics public depending on requirements
-        
+        # Check if the user exists
+        target_user = db.query(User).filter(User.id == user_id).first()
+        if not target_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        # Implement access control - only profile owner or admin can view detailed analytics
+        if not current_user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required to view profile analytics"
+            )
+
+        # Check if user owns the profile or is an admin
+        if user_id != current_user.id and not current_user.is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You don't have permission to view analytics for this profile"
+            )
+
         analytics = AnalyticsService.get_profile_analytics(db=db, user_id=user_id)
         return analytics
-        
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

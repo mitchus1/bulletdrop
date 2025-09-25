@@ -60,16 +60,86 @@ export interface ViewStats {
 }
 
 class AnalyticsService {
+  private rateLimitCache = new Map<string, { until: number; retryAfter: number }>();
+  private requestCache = new Map<string, { data: any; timestamp: number; promise?: Promise<any> }>();
+  private readonly CACHE_TTL = 30000; // 30 seconds cache
+
   /**
-   * Make an authenticated request to the analytics API
+   * Make an authenticated request to the analytics API with rate limit handling and caching
    */
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    retryCount: number = 0
   ): Promise<T> {
+    // Create a cache key based on endpoint and user token
     const token = localStorage.getItem('token');
+    const cacheKey = `${endpoint}_${token}_${JSON.stringify(options.body || '')}`;
+
+    // Check if we have a cached response that's still valid
+    const cached = this.requestCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < this.CACHE_TTL) {
+      // If there's a pending promise, return it
+      if (cached.promise) {
+        return cached.promise;
+      }
+      // Return cached data
+      return cached.data;
+    }
+
+    // Create the actual request promise
+    const requestPromise = this.performRequest<T>(endpoint, options, retryCount, token, cacheKey);
+
+    // Store the promise in cache to prevent duplicate requests
+    this.requestCache.set(cacheKey, {
+      data: null,
+      timestamp: Date.now(),
+      promise: requestPromise
+    });
+
+    try {
+      const result = await requestPromise;
+
+      // Cache the successful result
+      this.requestCache.set(cacheKey, {
+        data: result,
+        timestamp: Date.now(),
+        promise: undefined
+      });
+
+      // Clean up old cache entries
+      setTimeout(() => {
+        this.cleanupCache();
+      }, this.CACHE_TTL);
+
+      return result;
+    } catch (error) {
+      // Remove failed request from cache
+      this.requestCache.delete(cacheKey);
+      throw error;
+    }
+  }
+
+  /**
+   * Perform the actual HTTP request
+   */
+  private async performRequest<T>(
+    endpoint: string,
+    options: RequestInit,
+    retryCount: number,
+    token: string | null,
+    cacheKey: string
+  ): Promise<T> {
     const url = `${API_BASE_URL}${endpoint}`;
-    
+
+    // Check if this endpoint is currently rate limited
+    const rateLimitKey = `${endpoint}_${token}`;
+    const rateLimitInfo = this.rateLimitCache.get(rateLimitKey);
+
+    if (rateLimitInfo && Date.now() < rateLimitInfo.until) {
+      throw new Error(`Rate limited until ${new Date(rateLimitInfo.until).toLocaleTimeString()}`);
+    }
+
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
@@ -78,13 +148,55 @@ class AnalyticsService {
       ...options,
     };
 
-    const response = await fetch(url, config);
-    
-    if (!response.ok) {
-      throw new Error(`Analytics API error: ${response.status}`);
-    }
+    try {
+      const response = await fetch(url, config);
 
-    return response.json();
+      if (response.status === 429) {
+        // Extract retry-after header if available
+        const retryAfter = response.headers.get('retry-after');
+        const retryAfterSeconds = retryAfter ? parseInt(retryAfter, 10) : Math.pow(2, retryCount + 1);
+        const until = Date.now() + (retryAfterSeconds * 1000);
+
+        // Cache the rate limit info
+        this.rateLimitCache.set(rateLimitKey, { until, retryAfter: retryAfterSeconds });
+
+        // Clean up cache after rate limit expires
+        setTimeout(() => {
+          this.rateLimitCache.delete(rateLimitKey);
+        }, retryAfterSeconds * 1000);
+
+        // If this is our first retry, wait and try again
+        if (retryCount < 2) {
+          await new Promise(resolve => setTimeout(resolve, Math.min(retryAfterSeconds * 1000, 30000)));
+          return this.performRequest<T>(endpoint, options, retryCount + 1, token, cacheKey);
+        }
+
+        throw new Error(`Rate limit exceeded. Retry after ${retryAfterSeconds}s`);
+      }
+
+      if (!response.ok) {
+        throw new Error(`Analytics API error: ${response.status}`);
+      }
+
+      return response.json();
+    } catch (error) {
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error('Network error - check your connection');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Clean up old cache entries
+   */
+  private cleanupCache(): void {
+    const now = Date.now();
+    for (const [key, entry] of this.requestCache.entries()) {
+      if (now - entry.timestamp > this.CACHE_TTL) {
+        this.requestCache.delete(key);
+      }
+    }
   }
 
   /**

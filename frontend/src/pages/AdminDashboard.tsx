@@ -4,6 +4,7 @@ import { checkAdminAccess, getAdminStats, getAllUsers, getAllDomains, getRecentA
 import { useNavigate } from 'react-router-dom';
 import AdminUserManagement from '../components/AdminUserManagement';
 import AdminStatistics from '../components/AdminStatistics';
+import SecurityDashboard from '../components/SecurityDashboard';
 
 interface AdminStats {
   total_users: number;
@@ -46,7 +47,7 @@ const AdminDashboard: React.FC = () => {
   const [stats, setStats] = useState<AdminStats | null>(null);
   const [domains, setDomains] = useState<Domain[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'statistics' | 'users' | 'domains' | 'activity'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'statistics' | 'users' | 'domains' | 'activity' | 'security'>('overview');
   
   // Domain management state
   const [showDomainModal, setShowDomainModal] = useState(false);
@@ -213,7 +214,8 @@ const AdminDashboard: React.FC = () => {
               { key: 'statistics', label: 'Statistics' },
               { key: 'users', label: 'User Management' },
               { key: 'domains', label: 'Domains' },
-              { key: 'activity', label: 'Activity' }
+              { key: 'activity', label: 'Activity' },
+              { key: 'security', label: 'Security' }
             ].map((tab) => (
               <button
                 key={tab.key}
@@ -465,6 +467,11 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Security Tab */}
+        {activeTab === 'security' && (
+          <SecurityDashboard />
         )}
       </div>
 

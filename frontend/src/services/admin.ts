@@ -106,9 +106,67 @@ export const getRecentActivity = async (days?: number, limit?: number) => {
   const searchParams = new URLSearchParams();
   if (days) searchParams.append('days', days.toString());
   if (limit) searchParams.append('limit', limit.toString());
-  
+
   const params = searchParams.toString() ? `?${searchParams.toString()}` : '';
   return await apiService.adminRequest(`/activity${params}`);
+};
+
+// Security monitoring functions
+export const getSecurityEvents = async (params?: {
+  limit?: number;
+  event_type?: string;
+}) => {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.append('limit', params.limit.toString());
+  if (params?.event_type) searchParams.append('event_type', params.event_type);
+
+  const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  return await apiService.adminRequest(`/security/events${queryString}`);
+};
+
+export const getSecurityStats = async () => {
+  return await apiService.adminRequest('/security/stats');
+};
+
+export const getSecuritySummary = async () => {
+  return await apiService.adminRequest('/security/summary');
+};
+
+export const getIpSecurityEvents = async (ipAddress: string, limit?: number) => {
+  const params = limit ? `?limit=${limit}` : '';
+  return await apiService.adminRequest(`/security/ip/${encodeURIComponent(ipAddress)}${params}`);
+};
+
+export const getSecurityEventTypes = async () => {
+  return await apiService.adminRequest('/security/event-types');
+};
+
+export const testSecurityAlert = async (eventType?: string) => {
+  const body = eventType ? JSON.stringify({ event_type: eventType }) : '{}';
+  return await apiService.adminRequest('/security/alerts/test', {
+    method: 'POST',
+    body
+  });
+};
+
+export const clearSecurityEvents = async (params?: {
+  event_type?: string;
+  older_than_hours?: number;
+}) => {
+  const searchParams = new URLSearchParams();
+  if (params?.event_type) searchParams.append('event_type', params.event_type);
+  if (params?.older_than_hours) searchParams.append('older_than_hours', params.older_than_hours.toString());
+
+  const queryString = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  return await apiService.adminRequest(`/security/events/clear${queryString}`, {
+    method: 'DELETE'
+  });
+};
+
+export const deleteSecurityEvent = async (eventId: string) => {
+  return await apiService.adminRequest(`/security/events/${encodeURIComponent(eventId)}`, {
+    method: 'DELETE'
+  });
 };
 
 export default {
@@ -125,4 +183,12 @@ export default {
   getUserActivityStats,
   getDomainStats,
   getRecentActivity,
+  getSecurityEvents,
+  getSecurityStats,
+  getSecuritySummary,
+  getIpSecurityEvents,
+  getSecurityEventTypes,
+  testSecurityAlert,
+  clearSecurityEvents,
+  deleteSecurityEvent,
 };

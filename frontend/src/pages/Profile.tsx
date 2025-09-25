@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import ReactPlayer from 'react-player'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -229,30 +229,33 @@ export default function Profile() {
     }
   }
 
-  const isOwnProfile = currentUser?.username === username
+  // Memoize computed values to prevent unnecessary re-renders
+  const isOwnProfile = useMemo(() => {
+    return currentUser?.username === username;
+  }, [currentUser?.username, username]);
 
-  // Determine if background image is a YouTube URL
-  const rawBg = profile?.background_image || ''
-  const normalizedBg = normalizeMediaUrl(rawBg)
-  const isYouTubeBg = isUrl(rawBg) && /youtube\.com|youtu\.be/.test(rawBg)
+  const { normalizedBg, isYouTubeBg } = useMemo(() => {
+    const rawBg = profile?.background_image || '';
+    const normalizedBg = normalizeMediaUrl(rawBg);
+    const isYouTubeBg = isUrl(rawBg) && /youtube\.com|youtu\.be/.test(rawBg);
+    return { normalizedBg, isYouTubeBg };
+  }, [profile?.background_image]);
+
+  // Memoize profile ID to prevent useProfileViewTracking from re-firing
+  const profileId = useMemo(() => profile?.id, [profile?.id]);
 
   // Track profile views (only for profiles that aren't the current user's own profile)
   useProfileViewTracking(
-    profile?.id, 
-    { 
-      enabled: !isOwnProfile && !!profile?.id,
+    profileId,
+    {
+      enabled: !isOwnProfile && !!profileId,
       delay: 3000 // 3 second delay for profile views
     }
-  )
+  );
 
 
-  useEffect(() => {
-    if (username) {
-      fetchProfile()
-    }
-  }, [username])
-
-  const fetchProfile = async () => {
+  // Memoize fetchProfile to prevent unnecessary re-renders
+  const fetchProfile = useCallback(async () => {
     try {
       const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const response = await fetch(`${apiUrl}/users/${username}`)
@@ -273,7 +276,13 @@ export default function Profile() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [username]); // Only re-create when username changes
+
+  useEffect(() => {
+    if (username) {
+      fetchProfile()
+    }
+  }, [username]) // fetchProfile is stable now
 
 
   const formatBytes = (bytes: number) => {
@@ -393,12 +402,22 @@ export default function Profile() {
                   <div className="w-28 h-28 rounded-xl bg-gray-800/60 border border-gray-600/50 flex items-center justify-center mx-auto shadow-lg">
                     <span className="text-gray-200 font-medium text-3xl">
                       {profile.username.charAt(0).toUpperCase()}
+                      
                     </span>
                   </div>
                 )}
                 <h1 className="text-2xl font-medium text-gray-100 mt-4">
                   {profile.username}
                 </h1>
+                {/* Discord username display (non-clickable) */}
+                {profile.discord_username && (
+                  <div className="flex items-center justify-center space-x-2 text-sm text-gray-400">
+                    <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M20.317 4.492c-1.53-.69-3.17-1.2-4.885-1.49a.075.075 0 0 0-.079.036c-.21.369-.444.85-.608 1.23a18.566 18.566 0 0 0-5.487 0 12.36 12.36 0 0 0-.617-1.23A.077.077 0 0 0 8.562 3c-1.714.29-3.354.8-4.885 1.491a.07.07 0 0 0-.032.027C.533 9.093-.32 13.555.099 17.961a.08.08 0 0 0 .031.055 20.03 20.03 0 0 0 5.993 2.98.078.078 0 0 0 .084-.026 13.83 13.83 0 0 0 1.226-1.963.074.074 0 0 0-.041-.104 13.201 13.201 0 0 1-1.872-.878.075.075 0 0 1-.008-.125c.126-.093.252-.19.372-.287a.075.075 0 0 1 .078-.01c3.927 1.764 8.18 1.764 12.061 0a.075.075 0 0 1 .079.009c.12.098.246.195.372.288a.075.075 0 0 1-.006.125c-.598.344-1.22.635-1.873.877a.075.075 0 0 0-.041.105c.36.687.772 1.341 1.225 1.962a.077.077 0 0 0 .084.028 19.963 19.963 0 0 0 6.002-2.981.076.076 0 0 0 .032-.054c.5-5.094-.838-9.52-3.549-13.442a.06.06 0 0 0-.031-.028zM8.02 15.278c-1.182 0-2.157-1.069-2.157-2.38 0-1.312.956-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.956 2.38-2.157 2.38zm7.975 0c-1.183 0-2.157-1.069-2.157-2.38 0-1.312.955-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.946 2.38-2.157 2.38z"/>
+                    </svg>
+                    <span className="font-mono text-indigo-300">{profile.discord_username}</span>
+                  </div>
+                )}
                 <p className="text-gray-400 text-sm mt-1">
                   Member since {new Date(profile.created_at).toLocaleDateString()}
                 </p>
@@ -426,12 +445,21 @@ export default function Profile() {
                   <div className="flex justify-between text-sm mb-2 text-gray-300">
                     <span>Profile views</span>
                   </div>
-                  <ViewCounter 
-                    contentType="profile" 
-                    contentId={profile.id} 
-                    showDetails={true}
-                    className="text-gray-400"
-                  />
+                  {/* Only show ViewCounter for other users' profiles to prevent double analytics requests */}
+                  {!isOwnProfile && (
+                    <ViewCounter
+                      contentType="profile"
+                      contentId={profile.id}
+                      showDetails={true}
+                      className="text-gray-400"
+                    />
+                  )}
+                  {/* For own profile, show a simple message without making additional requests */}
+                  {isOwnProfile && (
+                    <div className="text-gray-400 text-sm">
+                      <span>👁 Profile views are tracked for other users</span>
+                    </div>
+                  )}
                 </div>
                 
                 <div>
@@ -557,15 +585,7 @@ export default function Profile() {
                   </p>
                 </div>
                 
-                {/* Discord username display (non-clickable) */}
-                {profile.discord_username && (
-                  <div className="flex items-center space-x-2 text-sm text-gray-400">
-                    <svg className="w-4 h-4 text-indigo-400" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M20.317 4.492c-1.53-.69-3.17-1.2-4.885-1.49a.075.075 0 0 0-.079.036c-.21.369-.444.85-.608 1.23a18.566 18.566 0 0 0-5.487 0 12.36 12.36 0 0 0-.617-1.23A.077.077 0 0 0 8.562 3c-1.714.29-3.354.8-4.885 1.491a.07.07 0 0 0-.032.027C.533 9.093-.32 13.555.099 17.961a.08.08 0 0 0 .031.055 20.03 20.03 0 0 0 5.993 2.98.078.078 0 0 0 .084-.026 13.83 13.83 0 0 0 1.226-1.963.074.074 0 0 0-.041-.104 13.201 13.201 0 0 1-1.872-.878.075.075 0 0 1-.008-.125c.126-.093.252-.19.372-.287a.075.075 0 0 1 .078-.01c3.927 1.764 8.18 1.764 12.061 0a.075.075 0 0 1 .079.009c.12.098.246.195.372.288a.075.075 0 0 1-.006.125c-.598.344-1.22.635-1.873.877a.075.075 0 0 0-.041.105c.36.687.772 1.341 1.225 1.962a.077.077 0 0 0 .084.028 19.963 19.963 0 0 0 6.002-2.981.076.076 0 0 0 .032-.054c.5-5.094-.838-9.52-3.549-13.442a.06.06 0 0 0-.031-.028zM8.02 15.278c-1.182 0-2.157-1.069-2.157-2.38 0-1.312.956-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.956 2.38-2.157 2.38zm7.975 0c-1.183 0-2.157-1.069-2.157-2.38 0-1.312.955-2.38 2.157-2.38 1.21 0 2.176 1.077 2.157 2.38 0 1.312-.946 2.38-2.157 2.38z"/>
-                    </svg>
-                    <span className="font-mono text-indigo-300">{profile.discord_username}</span>
-                  </div>
-                )}
+                
               </div>
             </div>
 

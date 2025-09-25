@@ -34,9 +34,22 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
  * const user = await api.login({ username: 'john', password: 'secret' });
  * ```
  */
+/**
+ * Interface for rate limiting information from API responses
+ */
+export interface RateLimitInfo {
+  limit: number;
+  remaining: number;
+  reset: number;
+  userLimit?: number;
+  userRemaining?: number;
+  userReset?: number;
+}
+
 class ApiService {
   private baseURL: string;
   private token: string | null = null;
+  public rateLimitInfo: RateLimitInfo | null = null;
 
   /**
    * Creates a new ApiService instance.
@@ -93,6 +106,9 @@ class ApiService {
     try {
       const response = await fetch(url, config);
 
+      // Extract rate limiting information from headers
+      this.extractRateLimitInfo(response);
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
@@ -105,6 +121,45 @@ class ApiService {
       }
       throw new Error('Network error occurred');
     }
+  }
+
+  /**
+   * Extracts rate limiting information from response headers.
+   *
+   * @param response - The fetch Response object
+   */
+  private extractRateLimitInfo(response: Response): void {
+    const headers = response.headers;
+
+    // Extract IP-based rate limit headers
+    const limit = headers.get('x-ratelimit-limit');
+    const remaining = headers.get('x-ratelimit-remaining');
+    const reset = headers.get('x-ratelimit-reset');
+
+    // Extract user-based rate limit headers
+    const userLimit = headers.get('x-user-ratelimit-limit');
+    const userRemaining = headers.get('x-user-ratelimit-remaining');
+    const userReset = headers.get('x-user-ratelimit-reset');
+
+    if (limit && remaining && reset) {
+      this.rateLimitInfo = {
+        limit: parseInt(limit, 10),
+        remaining: parseInt(remaining, 10),
+        reset: parseInt(reset, 10),
+        userLimit: userLimit ? parseInt(userLimit, 10) : undefined,
+        userRemaining: userRemaining ? parseInt(userRemaining, 10) : undefined,
+        userReset: userReset ? parseInt(userReset, 10) : undefined,
+      };
+    }
+  }
+
+  /**
+   * Gets the current rate limit information from the last API call.
+   *
+   * @returns Current rate limit information or null if not available
+   */
+  getRateLimitInfo(): RateLimitInfo | null {
+    return this.rateLimitInfo;
   }
 
   // ==================== Authentication Endpoints ====================

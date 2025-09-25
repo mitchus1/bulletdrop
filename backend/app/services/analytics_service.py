@@ -501,7 +501,7 @@ class AnalyticsService:
                     trending_profiles.append({
                         "user_id": int(user_id),
                         "username": user.username,
-                        "display_name": user.display_name,
+                        "display_name": getattr(user, 'display_name', user.username),
                         "avatar_url": user.avatar_url,
                         "view_count": int(score),
                         "unique_viewers": 0  # Could be enhanced
@@ -533,7 +533,7 @@ class AnalyticsService:
                         trending_profiles.append({
                             "user_id": user_id,
                             "username": user.username,
-                            "display_name": user.display_name,
+                            "display_name": getattr(user, 'display_name', user.username),
                             "avatar_url": user.avatar_url,
                             "view_count": int(view_count),
                             "unique_viewers": int(unique_viewers)
