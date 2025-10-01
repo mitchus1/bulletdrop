@@ -22,6 +22,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from app.services.redis_service import redis_service
 from app.services.security_monitor import security_monitor
 from app.core.config import settings
+from app.core.utils import extract_client_ip
 import logging
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,16 @@ class RateLimitConfig:
     def get_user_upload_limits(cls):
         """Per-user upload limits"""
         return 50, 200  # 50/minute, 200/hour - reasonable for uploads
+
+    @classmethod
+    def get_analytics_limits(cls):
+        """Analytics endpoint limits - prevent spam/metric inflation"""
+        return 100, 1000  # 100/minute, 1000/hour per IP
+
+    @classmethod
+    def get_user_analytics_limits(cls):
+        """Per-user analytics limits"""
+        return 200, 2000  # 200/minute, 2000/hour - for authenticated users
 
     @classmethod
     def get_block_duration(cls):
@@ -174,24 +185,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.rate_limiter = RateLimiter()
     
     def get_client_ip(self, request: Request) -> str:
-        """Extract client IP address from request headers."""
-        # Check for forwarded IP headers (for proxy/load balancer setups)
-        forwarded_ip = request.headers.get("X-Forwarded-For")
-        if forwarded_ip:
-            # X-Forwarded-For can contain multiple IPs, take the first one
-            return forwarded_ip.split(",")[0].strip()
-        
-        real_ip = request.headers.get("X-Real-IP")
-        if real_ip:
-            return real_ip.strip()
-        
-        # Fallback to direct client IP
-        return request.client.host if request.client else "unknown"
+        """Extract client IP address from request headers using centralized utility."""
+        return extract_client_ip(request)
     
     def get_rate_limit_key(self, request: Request, ip: str) -> str:
         """Generate rate limit key based on endpoint and IP."""
         path = request.url.path.lower()
-        
+
         # Different prefixes for different endpoint types
         if any(auth_path in path for auth_path in ["/login", "/register", "/auth"]):
             return f"auth:ip:{ip}"
@@ -199,13 +199,15 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return f"upload:ip:{ip}"
         elif "/admin" in path:
             return f"admin:ip:{ip}"
+        elif "/analytics" in path:
+            return f"analytics:ip:{ip}"
         else:
             return f"api:ip:{ip}"
-    
+
     def get_rate_limits(self, request: Request) -> Tuple[int, int, int, int]:
         """Get rate limits for the current endpoint type."""
         path = request.url.path.lower()
-        
+
         if any(auth_path in path for auth_path in ["/login", "/register", "/auth"]):
             minute_limit, hour_limit = RateLimitConfig.get_auth_limits()
             return minute_limit, 60, hour_limit, 3600
@@ -214,6 +216,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return minute_limit, 60, hour_limit, 3600
         elif "/admin" in path:
             minute_limit, hour_limit = RateLimitConfig.get_admin_limits()
+            return minute_limit, 60, hour_limit, 3600
+        elif "/analytics" in path:
+            minute_limit, hour_limit = RateLimitConfig.get_analytics_limits()
             return minute_limit, 60, hour_limit, 3600
         else:
             minute_limit, hour_limit = RateLimitConfig.get_api_limits()
@@ -270,6 +275,8 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # Apply per-user rate limits (more generous than IP limits)
             if "/upload" in request.url.path.lower():
                 user_minute_limit, user_hour_limit = RateLimitConfig.get_user_upload_limits()
+            elif "/analytics" in request.url.path.lower():
+                user_minute_limit, user_hour_limit = RateLimitConfig.get_user_analytics_limits()
             else:
                 user_minute_limit, user_hour_limit = RateLimitConfig.get_user_limits()
 

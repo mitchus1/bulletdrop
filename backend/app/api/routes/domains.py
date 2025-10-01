@@ -212,10 +212,10 @@ async def claim_domain(
         )
 
     # Check if user can claim premium domains
-    if domain.is_premium and not current_user.is_admin:
+    if domain.is_premium and not (current_user.is_admin or current_user.has_active_premium()):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Premium domain requires admin privileges"
+            detail="Premium domain requires active premium subscription"
         )
 
     # Create user domain claim

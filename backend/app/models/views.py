@@ -9,7 +9,7 @@ Classes:
     ProfileView: Track profile page visits with visitor information
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, BigInteger, Text
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, BigInteger, Text, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.core.database import Base
@@ -37,15 +37,21 @@ class FileView(Base):
     __tablename__ = "file_views"
     
     id = Column(Integer, primary_key=True, index=True)
-    upload_id = Column(Integer, ForeignKey("uploads.id", ondelete="CASCADE"), nullable=False)
+    upload_id = Column(Integer, ForeignKey("uploads.id", ondelete="CASCADE"), nullable=False, index=True)
     viewer_ip = Column(String(45), nullable=False)  # Supports IPv4 and IPv6
     user_agent = Column(Text, nullable=True)
     referer = Column(Text, nullable=True)
     country = Column(String(2), nullable=True)  # ISO country code
-    viewed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
+    viewed_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
     # Relationships
     upload = relationship("Upload", back_populates="views")
+
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('idx_file_views_upload_time', 'upload_id', 'viewed_at'),
+        Index('idx_file_views_ip_time', 'viewer_ip', 'viewed_at'),
+    )
 
 
 class ProfileView(Base):
@@ -72,17 +78,23 @@ class ProfileView(Base):
     __tablename__ = "profile_views"
     
     id = Column(Integer, primary_key=True, index=True)
-    profile_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    profile_user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     viewer_ip = Column(String(45), nullable=False)  # Supports IPv4 and IPv6
-    viewer_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    viewer_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     user_agent = Column(Text, nullable=True)
     referer = Column(Text, nullable=True)
     country = Column(String(2), nullable=True)  # ISO country code
-    viewed_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
+    viewed_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
     # Relationships
     profile_user = relationship("User", foreign_keys=[profile_user_id], back_populates="profile_views_received")
     viewer_user = relationship("User", foreign_keys=[viewer_user_id], back_populates="profile_views_made")
+
+    # Composite indexes for common query patterns
+    __table_args__ = (
+        Index('idx_profile_views_user_time', 'profile_user_id', 'viewed_at'),
+        Index('idx_profile_views_ip_time', 'viewer_ip', 'viewed_at'),
+    )
 
 
 class ViewSummary(Base):
@@ -109,12 +121,13 @@ class ViewSummary(Base):
     id = Column(Integer, primary_key=True, index=True)
     content_type = Column(String(20), nullable=False)  # 'file' or 'profile'
     content_id = Column(Integer, nullable=False)
-    date = Column(DateTime, nullable=False)  # Date truncated to day
+    date = Column(DateTime, nullable=False, index=True)  # Date truncated to day
     view_count = Column(Integer, default=0)
     unique_viewers = Column(Integer, default=0)
-    
-    # Composite index for fast queries
+
+    # Composite indexes for fast queries
     __table_args__ = (
-        # Index for content lookups
+        Index('idx_view_summary_lookup', 'content_type', 'content_id', 'date'),
+        Index('idx_view_summary_date', 'date', 'view_count'),
         {'extend_existing': True}
     )

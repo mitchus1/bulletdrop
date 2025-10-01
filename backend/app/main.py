@@ -30,6 +30,7 @@ from app.services.analytics_service import AnalyticsService
 from app.services.image_effects_service import ImageEffectsService
 from app.schemas.analytics import ViewCreate
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 from sqlalchemy.orm import Session
 
 # Create database tables on startup
@@ -44,14 +45,18 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Configure CORS middleware for cross-origin requests
+# Configure CORS middleware for cross-origin requests (with preflight cache)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
+
+# Add security headers middleware
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Add rate limiting middleware (before route handlers)
 app.add_middleware(RateLimitMiddleware)

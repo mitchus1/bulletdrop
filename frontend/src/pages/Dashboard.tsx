@@ -115,7 +115,7 @@ export default function Dashboard() {
   const storagePercentage = user ? (user.storage_used / user.storage_limit) * 100 : 0;
 
   return (
-    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300">
+    <div className="mx-auto py-6 px-4 sm:px-6 lg:px-8 bg-gray-50 dark:bg-gray-900 min-h-screen transition-colors duration-300">
       <div className="md:flex md:items-center md:justify-between mb-8">
         <div className="flex-1 min-w-0">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">

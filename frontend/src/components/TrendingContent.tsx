@@ -17,12 +17,12 @@ interface TrendingContentProps {
   className?: string;
 }
 
-export default function TrendingContent({ 
+export default function TrendingContent({
   timePeriod = '24h',
   maxItems = 5,
   showProfiles = true,
   showFiles = true,
-  className = '' 
+  className = ''
 }: TrendingContentProps) {
   const [trending, setTrending] = useState<TrendingData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -56,7 +56,7 @@ export default function TrendingContent({
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) return 'Today';
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
@@ -105,7 +105,7 @@ export default function TrendingContent({
         <select
           value={selectedPeriod}
           onChange={(e) => setSelectedPeriod(e.target.value as '24h' | '7d' | '30d')}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="text-sm border border-gray-300 dark:border-gray-700 dark:bg-gray-800 rounded-lg px-3 py-1 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         >
           <option value="24h">Last 24 Hours</option>
           <option value="7d">Last 7 Days</option>
@@ -124,7 +124,7 @@ export default function TrendingContent({
                 <div className="flex-shrink-0 w-6 h-6 bg-gradient-to-r from-orange-400 to-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center mr-3">
                   {index + 1}
                 </div>
-                
+
                 {/* File Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center space-x-2">
@@ -168,51 +168,53 @@ export default function TrendingContent({
           <h4 className="text-sm font-medium text-gray-700 mb-3">👤 Trending Profiles</h4>
           <div className="space-y-2">
             {trending.trending_profiles.slice(0, maxItems).map((profile, index) => (
-              <div key={profile.user_id} className="flex items-center p-3 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+              <div key={profile.user_id} className="flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
                 {/* Rank */}
                 <div className="flex-shrink-0 w-6 h-6 bg-gradient-to-r from-purple-400 to-pink-500 text-white text-xs font-bold rounded-full flex items-center justify-center mr-3">
                   {index + 1}
                 </div>
-                
+
                 {/* Avatar */}
-                <div className="flex-shrink-0 mr-3">
-                  {profile.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={profile.username}
-                      className="w-8 h-8 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
-                      <span className="text-xs font-medium text-gray-600">
-                        {profile.username.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                
-                {/* Profile Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center space-x-2">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {profile.display_name || profile.username}
-                    </p>
-                    {profile.display_name && (
-                      <span className="text-xs text-gray-500">@{profile.username}</span>
+                <a href={`/profile/${profile.username}`}>
+                  <div className="flex-shrink-0 mr-3">
+                    {profile.avatar_url ? (
+                      <img
+                        src={profile.avatar_url}
+                        alt={profile.username}
+                        className="w-8 h-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center">
+                        <span className="text-xs font-medium text-gray-600">
+                          {profile.username.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
                     )}
                   </div>
-                  <div className="flex items-center space-x-4 mt-1">
-                    <div className="flex items-center space-x-1 text-gray-600">
-                      <EyeIcon className="w-3 h-3" />
-                      <span className="text-xs">{formatCount(profile.view_count)} views</span>
+                </a>
+                {/* Profile Info */}
+                <a href={`/profile/${profile.username}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {profile.display_name || profile.username}
+                      </p>
+                      {profile.display_name && (
+                        <span className="text-xs text-gray-500">@{profile.username}</span>
+                      )}
                     </div>
-                    <div className="flex items-center space-x-1 text-gray-600">
-                      <UsersIcon className="w-3 h-3" />
-                      <span className="text-xs">{formatCount(profile.unique_viewers)} unique</span>
+                    <div className="flex items-center space-x-4 mt-1">
+                      <div className="flex items-center space-x-1 text-gray-600">
+                        <EyeIcon className="w-3 h-3" />
+                        <span className="text-xs">{formatCount(profile.view_count)} views</span>
+                      </div>
+                      <div className="flex items-center space-x-1 text-gray-600">
+                        <UsersIcon className="w-3 h-3" />
+                        <span className="text-xs">{formatCount(profile.unique_viewers)} unique</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-
+                </a>
                 {/* View Profile Button */}
                 <button
                   onClick={() => {
@@ -230,14 +232,14 @@ export default function TrendingContent({
       )}
 
       {/* Empty State */}
-      {(!showFiles || trending.trending_files.length === 0) && 
-       (!showProfiles || trending.trending_profiles.length === 0) && (
-        <div className="text-center py-8 text-gray-500">
-          <ClockIcon className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p>No trending content for {getPeriodLabel(selectedPeriod).toLowerCase()}</p>
-          <p className="text-sm mt-2">Check back later or try a different time period</p>
-        </div>
-      )}
+      {(!showFiles || trending.trending_files.length === 0) &&
+        (!showProfiles || trending.trending_profiles.length === 0) && (
+          <div className="text-center py-8 text-gray-500">
+            <ClockIcon className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            <p>No trending content for {getPeriodLabel(selectedPeriod).toLowerCase()}</p>
+            <p className="text-sm mt-2">Check back later or try a different time period</p>
+          </div>
+        )}
     </div>
   );
 }

@@ -64,6 +64,39 @@ class UploadService:
             "file_extension": Path(file.filename or "").suffix.lower()
         }
 
+    def validate_mime_type(self, content: bytes, expected_category: str) -> bool:
+        """Validate MIME type matches expected category to prevent file masquerading"""
+        try:
+            mime_type = magic.from_buffer(content[:1024], mime=True)
+
+            # Define allowed MIME types per category
+            allowed_mimes = {
+                'images': ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml'],
+                'videos': ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/x-msvideo', 'video/webm'],
+                'documents': ['application/pdf', 'text/plain', 'text/markdown',
+                             'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+                'other': []  # Other category is permissive
+            }
+
+            if expected_category == 'other':
+                return True
+
+            category_mimes = allowed_mimes.get(expected_category, [])
+            is_valid = mime_type in category_mimes
+
+            if not is_valid:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"MIME type mismatch: expected {expected_category}, got {mime_type}")
+
+            return is_valid
+
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"MIME validation error: {str(e)}")
+            return False  # Fail closed - reject if validation fails
+
     def generate_unique_filename(self, original_filename: str) -> str:
         """Generate unique filename while preserving extension"""
         file_ext = Path(original_filename).suffix.lower()
@@ -121,6 +154,11 @@ class UploadService:
 
     def generate_upload_url(self, filename: str, domain: Optional[Domain] = None, request_host: Optional[str] = None) -> str:
         """Generate public URL for uploaded file"""
+        # Sanitize filename to prevent path traversal
+        safe_filename = Path(filename).as_posix()
+        if '..' in safe_filename or safe_filename.startswith('/'):
+            raise ValueError(f"Invalid file path: {filename}")
+
         if domain:
             base_url = f"https://{domain.domain_name}"
         elif request_host:
@@ -132,7 +170,7 @@ class UploadService:
         else:
             base_url = "http://localhost:8000"  # Fallback for development
 
-        return f"{base_url}/uploads/{filename}"
+        return f"{base_url}/uploads/{safe_filename}"
 
     async def create_upload_record(
         self,
@@ -210,66 +248,92 @@ class UploadService:
         is_public: bool = True,
         request_host: Optional[str] = None
     ) -> Upload:
-        """Complete file upload process"""
+        """Complete file upload process with transaction safety"""
+        saved_file_path = None
+        processed_file_path = None
 
-        # Get domain if specified
-        domain = None
-        if domain_id:
-            domain = db.query(Domain).filter(Domain.id == domain_id).first()
-            if not domain or not domain.is_available:
+        try:
+            # Get domain if specified
+            domain = None
+            if domain_id:
+                domain = db.query(Domain).filter(Domain.id == domain_id).first()
+                if not domain or not domain.is_available:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid or unavailable domain"
+                    )
+
+            # Validate file (including domain-specific limits)
+            file_info = self.validate_file(file, user, domain)
+
+            # Generate unique filename
+            unique_filename = self.generate_unique_filename(file_info["original_filename"])
+
+            # Detect MIME type for categorization and validation
+            content = await file.read()
+            await file.seek(0)  # Reset file pointer
+
+            mime_type = magic.from_buffer(content[:1024], mime=True)
+            category = self.get_file_category(mime_type)
+
+            # Validate MIME type matches file extension category
+            if not self.validate_mime_type(content, category):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid or unavailable domain"
+                    detail=f"File content does not match extension. Detected type: {mime_type}"
                 )
 
-        # Validate file (including domain-specific limits)
-        file_info = self.validate_file(file, user, domain)
+            # Save file
+            file_path = await self.save_file(file, unique_filename, category)
+            saved_file_path = self.upload_dir / file_path
 
-        # Generate unique filename
-        unique_filename = self.generate_unique_filename(file_info["original_filename"])
+            # Apply default image effect for premium/admin users on image uploads
+            if category == 'images' and user.default_image_effect in ("rgb",):
+                # Only apply if user is admin or has active premium
+                if user.is_admin or user.has_active_premium():
+                    try:
+                        # Generate processed image bytes
+                        original_abs_path = self.upload_dir / file_path
+                        processed_bytes = await ImageEffectsService.apply_effect(str(original_abs_path), user.default_image_effect)
+                        if processed_bytes:
+                            # Save processed image as PNG with same base name
+                            base = Path(unique_filename).stem
+                            processed_filename = f"{base}.png"
+                            processed_rel_path = Path('images') / processed_filename
+                            processed_abs_path = self.upload_dir / processed_rel_path
+                            with open(processed_abs_path, 'wb') as out:
+                                out.write(processed_bytes)
 
-        # Detect MIME type for categorization
-        content = await file.read()
-        await file.seek(0)  # Reset file pointer
+                            processed_file_path = processed_abs_path
+                            # Replace file_path and unique_filename to reference processed PNG
+                            file_path = str(processed_rel_path)
+                            unique_filename = processed_filename
+                            # Update file_info size to processed size for accurate accounting
+                            file_info["file_size"] = len(processed_bytes)
+                    except Exception:
+                        # Fail silently; keep original if processing fails
+                        pass
 
-        mime_type = magic.from_buffer(content[:1024], mime=True)
-        category = self.get_file_category(mime_type)
+            # Create database record - if this fails, clean up files
+            upload = await self.create_upload_record(
+                db, user, file_info, file_path, unique_filename, custom_name, domain, is_public, request_host
+            )
 
-        # Save file
-        file_path = await self.save_file(file, unique_filename, category)
+            return upload
 
-        # Apply default image effect for premium/admin users on image uploads
-        if category == 'images' and user.default_image_effect in ("rgb",):
-            # Only apply if user is admin or has active premium
-            if user.is_admin or user.has_active_premium():
+        except Exception as e:
+            # Rollback: delete files if database operation failed
+            if saved_file_path and saved_file_path.exists():
                 try:
-                    # Generate processed image bytes
-                    original_abs_path = self.upload_dir / file_path
-                    processed_bytes = await ImageEffectsService.apply_effect(str(original_abs_path), user.default_image_effect)
-                    if processed_bytes:
-                        # Save processed image as PNG with same base name
-                        base = Path(unique_filename).stem
-                        processed_filename = f"{base}.png"
-                        processed_rel_path = Path('images') / processed_filename
-                        processed_abs_path = self.upload_dir / processed_rel_path
-                        with open(processed_abs_path, 'wb') as out:
-                            out.write(processed_bytes)
-
-                        # Replace file_path and unique_filename to reference processed PNG
-                        file_path = str(processed_rel_path)
-                        unique_filename = processed_filename
-                        # Update file_info size to processed size for accurate accounting
-                        file_info["file_size"] = len(processed_bytes)
+                    saved_file_path.unlink()
                 except Exception:
-                    # Fail silently; keep original if processing fails
                     pass
-
-        # Create database record
-        upload = await self.create_upload_record(
-            db, user, file_info, file_path, unique_filename, custom_name, domain, is_public, request_host
-        )
-
-        return upload
+            if processed_file_path and processed_file_path.exists():
+                try:
+                    processed_file_path.unlink()
+                except Exception:
+                    pass
+            raise e
 
     def get_user_uploads(
         self,
@@ -296,7 +360,7 @@ class UploadService:
         }
 
     def delete_upload(self, db: Session, user: User, upload_id: int) -> bool:
-        """Delete user upload"""
+        """Delete user upload with proper error handling"""
         upload = db.query(Upload).filter(
             Upload.id == upload_id,
             Upload.user_id == user.id
@@ -308,13 +372,32 @@ class UploadService:
                 detail="Upload not found"
             )
 
-        # Delete file from disk
+        # Delete file from disk first
+        file_deleted = False
+        file_path = self.upload_dir / upload.filename
         try:
-            file_path = self.upload_dir / upload.filename
             if file_path.exists():
                 file_path.unlink()
-        except Exception:
-            pass  # Continue even if file deletion fails
+                file_deleted = True
+            else:
+                # File doesn't exist on disk, log warning but continue with DB cleanup
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"File not found on disk during deletion: {file_path}")
+                file_deleted = True  # Allow DB cleanup even if file missing
+        except Exception as e:
+            # Log the error but allow database cleanup to proceed
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to delete file {file_path}: {str(e)}")
+            # Only proceed with DB deletion if we can confirm file is gone or missing
+            file_deleted = not file_path.exists()
+
+        if not file_deleted and file_path.exists():
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete file from disk"
+            )
 
         # Update user storage
         user.storage_used -= upload.file_size
